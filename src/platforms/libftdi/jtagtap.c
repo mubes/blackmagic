@@ -35,6 +35,11 @@
 
 int jtagtap_init(void)
 {
+	if ((active_cable->swd_read.set_data_low == MPSSE_DO) &&
+		(active_cable->swd_write.set_data_low == MPSSE_DO)) {
+		printf("Jtag not possible with resistor SWD!\n");
+			return -1;
+	}
 	assert(ftdic != NULL);
 	int err = ftdi_usb_purge_buffers(ftdic);
 	if (err != 0) {

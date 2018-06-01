@@ -37,20 +37,38 @@ cable_desc_t *active_cable;
 
 cable_desc_t cable_desc[] = {
 	{
-		/* Direct connection from FTDI to Jtag/Swd.*/
+		/* Direct connection from FTDI to Jtag/Swd.
+		 Pin 6 direct connected to RST.*/
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
+		.dbus_data = PIN6 | MPSSE_CS | MPSSE_DO | MPSSE_DI,
+		.dbus_ddr  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_TMS,
-		.assert_srst.data_low   = ~0x40,
-		.assert_srst.ddr_low    =  0x40,
-		.deassert_srst.data_low =  0x40,
-		.deassert_srst.ddr_low  = ~0x40,
+		.bitbang_tms_in_pin = MPSSE_CS,
+		.assert_srst.data_low   = ~PIN6,
+		.assert_srst.ddr_low    =  PIN6,
+		.deassert_srst.data_low =  PIN6,
+		.deassert_srst.ddr_low  = ~PIN6,
 		.description = "FLOSS-JTAG",
 		.name = "flossjtag"
+	},
+	{
+		/* MPSSE_SK (DB0) ----------- SWDCK/JTCK
+		 * MPSSE-DO (DB1) -- 470 R -- SWDIO/JTMS
+		 * MPSSE-DI (DB2) ----------- SWDIO/JTMS
+		 * DO is tristated with SWD read, so
+		 * resistor is not necessary, but protects
+		 * from contentions in case of errors.
+		 * JTAG not possible.*/
+		.vendor  = 0x0403,
+		.product = 0x6014,/*FT232H*/
+		.interface = INTERFACE_A,
+		.dbus_data = MPSSE_DO | MPSSE_DI | MPSSE_CS,
+		.dbus_ddr  = MPSSE_SK,
+		.swd_read.set_data_low  = MPSSE_DO,
+		.swd_write.set_data_low = MPSSE_DO,
+		.name = "ft232h_resistor_swd"
 	},
 	{
 		/* Buffered connection from FTDI to Jtag/Swd.
@@ -63,27 +81,27 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
-		.cbus_data = 0x1c,
-		.cbus_ddr  = 0x1f,
-		.assert_srst.data_high  =  ~0x08,
-		.deassert_srst.data_high =  0x08,
+		.dbus_data = PIN4 | MPSSE_CS | MPSSE_DI | MPSSE_DO,
+		.dbus_ddr  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
+		.cbus_data = PIN4 | PIN3 | PIN2,
+		.cbus_ddr  = PIN4 | PIN3 |PIN2 | PIN1 | PIN0,
+		.assert_srst.data_high  =  ~PIN3,
+		.deassert_srst.data_high =  PIN3,
 		.srst_get_port_cmd = GET_BITS_LOW,
-		.srst_get_pin = 0x40,
+		.srst_get_pin = ~PIN6,
 		.description = "FTDIJTAG",
 		.name = "ftdijtag"
 	},
 	{
 /* UART/SWO on Interface A
  * JTAG and control on INTERFACE_B
- * Bit 5 high selects SWD-READ (TMS routed to TDO)
+ * Bit 5 high selects SWD-WRITE (TMS routed to TDO)
  * Bit 6 high selects JTAG vs SWD (TMS routed to TDI/TDO)
  * BCBUS 1 (Output) N_SRST
  * BCBUS 2 (Input) V_ISO available
  *
  * For bitbanged SWD, set Bit 5 low and select SWD read with
- * Bit 6 low. Read Connector TMS as FTDI TDO.
+ * Bit 6 low. Read Connector TMS as MPSSE_DI.
  *
  * TDO is routed to Interface 0 RXD as SWO or with Uart
  * Connector pin 10 pulled to ground will connect Interface 0 RXD
@@ -92,17 +110,19 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_B,
-		.dbus_data = 0x6A,
-		.dbus_ddr  = 0x6B,
-		.cbus_data = 0x02,
-		.cbus_ddr  = 0x02,
+		.dbus_data = PIN6 | PIN5 | MPSSE_CS | MPSSE_DO | MPSSE_DI,
+		.dbus_ddr  = PIN6 | PIN5 | MPSSE_CS | MPSSE_DO | MPSSE_SK,
+		.cbus_data = PIN1 | PIN2,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_TDO, /* keep bit 5 low*/
-		.bitbang_swd_dbus_read_data = 0x02,
+		.bitbang_tms_in_pin = MPSSE_DI, /* keep bit 5 low*/
+		.bitbang_swd_dbus_read_data = MPSSE_DO,
 		.assert_srst.data_high   = ~PIN1,
 		.assert_srst.ddr_high    =  PIN1,
 		.deassert_srst.data_high =  PIN1,
 		.deassert_srst.ddr_high  = ~PIN1,
+		.swd_read.clr_data_low   = PIN5 | PIN6,
+		.swd_write.set_data_low  = PIN5,
+		.swd_write.clr_data_low  = PIN6,
 		.name = "ftdiswd"
 	},
 	{
@@ -149,7 +169,7 @@ cable_desc_t cable_desc[] = {
 		.dbus_data = 0xA8,
 		.dbus_ddr  = 0xAB,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_TMS,
+		.bitbang_tms_in_pin = MPSSE_CS,
 		.name = "ftdi"
 	},
 	{
@@ -171,7 +191,7 @@ cable_desc_t cable_desc[] = {
 		.dbus_data = 0x08,
 		.dbus_ddr  = 0x0B,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_TMS,
+		.bitbang_tms_in_pin = MPSSE_CS,
 		.name = "ft232h"
 	},
 	{
@@ -182,7 +202,7 @@ cable_desc_t cable_desc[] = {
 		.dbus_data = 0x08,
 		.dbus_ddr  = 0x0B,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_TMS,
+		.bitbang_tms_in_pin = MPSSE_CS,
 		.name = "ft4232h"
 	},
 	{

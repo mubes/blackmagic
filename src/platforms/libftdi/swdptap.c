@@ -27,19 +27,102 @@
 
 #include "general.h"
 #include "swdptap.h"
+#include "jtagtap.h"
 
-static uint8_t olddir = 0;
+enum  swdio_status{
+	SWDIO_STATUS_DRIVE = 0,
+	SWDIO_STATUS_FLOAT,
+};
 
-#define MPSSE_MASK (MPSSE_TDI | MPSSE_TDO | MPSSE_TMS)
-#define MPSSE_TD_MASK (MPSSE_TDI | MPSSE_TDO)
+static enum swdio_status olddir;
+static bool do_mpsse;
+
+#define MPSSE_MASK (MPSSE_DO | MPSSE_DI | MPSSE_CS)
+#define MPSSE_TD_MASK (MPSSE_DO | MPSSE_DI)
 #define MPSSE_TMS_SHIFT (MPSSE_WRITE_TMS | MPSSE_LSB |\
 						 MPSSE_BITMODE | MPSSE_WRITE_NEG)
+#define MPSSE_TDO_SHIFT (MPSSE_DO_WRITE | MPSSE_LSB |\
+						 MPSSE_BITMODE | MPSSE_WRITE_NEG)
+
+static void swdptap_turnaround(enum swdio_status dir)
+{
+	if (dir == olddir)
+		return;
+#ifdef DEBUG_SWD_BITS
+	DEBUG("%s", dir ? "\n-> ":"\n<- ");
+#endif
+	olddir = dir;
+	if (do_mpsse) {
+		if (dir == SWDIO_STATUS_FLOAT)	/* SWDIO goes to input */ {
+			active_cable->dbus_data |=  active_cable->swd_read.set_data_low;
+			active_cable->dbus_data &= ~active_cable->swd_read.clr_data_low;
+			active_cable->cbus_data |=  active_cable->swd_read.set_data_high;
+			active_cable->cbus_data &= ~active_cable->swd_read.clr_data_high;
+			uint8_t cmd_read[6] = {
+				SET_BITS_LOW,  active_cable->dbus_data,
+				active_cable->dbus_ddr & ~MPSSE_DO,
+				SET_BITS_HIGH, active_cable->cbus_data, active_cable->cbus_ddr};
+			platform_buffer_write(cmd_read, 6);
+		}
+		uint8_t cmd[] = {MPSSE_TDO_SHIFT, 0, 0}; /* One clock cycle */
+		platform_buffer_write(cmd, sizeof(cmd));
+		if (dir == SWDIO_STATUS_DRIVE)  /* SWDIO goes to output */ {
+			active_cable->dbus_data |=  active_cable->swd_write.set_data_low;
+			active_cable->dbus_data &= ~active_cable->swd_write.clr_data_low;
+			active_cable->cbus_data |=  active_cable->swd_write.set_data_high;
+			active_cable->cbus_data &= ~active_cable->swd_write.clr_data_high;
+			uint8_t cmd_write[6] = {
+				SET_BITS_LOW,  active_cable->dbus_data,
+				active_cable->dbus_ddr | MPSSE_DO,
+				SET_BITS_HIGH, active_cable->cbus_data, active_cable->cbus_ddr};
+			platform_buffer_write(cmd_write, 6);
+		}
+	} else {
+		uint8_t cmd[6];
+		int index = 0;
+
+		if(dir == SWDIO_STATUS_FLOAT)	  { /* SWDIO goes to input */
+			cmd[index++] = SET_BITS_LOW;
+			if (active_cable->bitbang_swd_dbus_read_data)
+				cmd[index] = active_cable->bitbang_swd_dbus_read_data;
+			else
+				cmd[index] = active_cable->dbus_data;
+			index++;
+			cmd[index++] = active_cable->dbus_ddr & ~MPSSE_MASK;
+		}
+		/* One clock cycle */
+		cmd[index++] = MPSSE_TMS_SHIFT;
+		cmd[index++] = 0;
+		cmd[index++] = 0;
+		if (dir == SWDIO_STATUS_DRIVE) {
+			cmd[index++] = SET_BITS_LOW;
+			cmd[index++] = active_cable->dbus_data |  MPSSE_MASK;
+			cmd[index++] = active_cable->dbus_ddr  & ~MPSSE_TD_MASK;
+		}
+		platform_buffer_write(cmd, index);
+	}
+}
 
 int swdptap_init(void)
 {
-	if (!active_cable->bitbang_tms_in_pin) {
-		DEBUG("SWD not possible or missing item in cable description.\n");
-		return -1;
+	bool swd_read =
+		active_cable->swd_read.set_data_low ||
+		active_cable->swd_read.clr_data_low ||
+		active_cable->swd_read.set_data_high ||
+		active_cable->swd_read.clr_data_high;
+	bool swd_write =
+		active_cable->swd_write.set_data_low ||
+		active_cable->swd_write.clr_data_low ||
+		active_cable->swd_write.set_data_high ||
+		active_cable->swd_write.clr_data_high;
+	do_mpsse = swd_read && swd_write;
+	if (!do_mpsse) {
+		if (!(active_cable->bitbang_tms_in_port_cmd &&
+			  active_cable->bitbang_tms_in_pin &&
+			  active_cable->bitbang_swd_dbus_read_data)) {
+			DEBUG("SWD not possible or missing item in cable description.\n");
+			return -1;
+		}
 	}
 	int err = ftdi_usb_purge_buffers(ftdic);
 	if (err != 0) {
@@ -63,173 +146,242 @@ int swdptap_init(void)
 	}
 	uint8_t ftdi_init[9] = {TCK_DIVISOR, 0x01, 0x00, SET_BITS_LOW, 0,0,
 				SET_BITS_HIGH, 0,0};
-	ftdi_init[4]=  active_cable->dbus_data |  MPSSE_MASK;
-	ftdi_init[5]= active_cable->dbus_ddr   & ~MPSSE_TD_MASK;
+	if (do_mpsse) {
+		DEBUG("Using genuine MPSSE for SWD.\n");
+		ftdi_init[4]=  active_cable->dbus_data;
+		active_cable->dbus_ddr &= ~MPSSE_CS; /* Do not touch SWDIO.*/
+		ftdi_init[5]= active_cable->dbus_ddr;
+	} else {
+		DEBUG("Using bitbang MPSSE for SWD.\n");
+		ftdi_init[4]=  active_cable->dbus_data |  MPSSE_MASK;
+		ftdi_init[5]= active_cable->dbus_ddr   & ~MPSSE_TD_MASK;
+	}
 	ftdi_init[7]= active_cable->cbus_data;
 	ftdi_init[8]= active_cable->cbus_ddr;
-	platform_buffer_write(ftdi_init, 9);
+	platform_buffer_write(ftdi_init, sizeof(ftdi_init));
+	if (do_mpsse) {
+		olddir = SWDIO_STATUS_FLOAT;
+		swdptap_turnaround(SWDIO_STATUS_DRIVE);
+	} else
+		olddir = SWDIO_STATUS_DRIVE;
 	platform_buffer_flush();
 
 	return 0;
 }
 
-static void swdptap_turnaround(uint8_t dir)
-{
-	if (dir == olddir)
-		return;
-	olddir = dir;
-	uint8_t cmd[6];
-	int index = 0;
-
-	if(dir)	  { /* SWDIO goes to input */
-		cmd[index++] = SET_BITS_LOW;
-		if (active_cable->bitbang_swd_dbus_read_data)
-			cmd[index] = active_cable->bitbang_swd_dbus_read_data;
-		else
-			cmd[index] = active_cable->dbus_data;
-		index++;
-		cmd[index++] = active_cable->dbus_ddr & ~MPSSE_MASK;
-	}
-	/* One clock cycle */
-	cmd[index++] = MPSSE_TMS_SHIFT;
-	cmd[index++] = 0;
-	cmd[index++] = 0;
-	if (!dir) {
-		cmd[index++] = SET_BITS_LOW;
-		cmd[index++] = active_cable->dbus_data |  MPSSE_MASK;
-		cmd[index++] = active_cable->dbus_ddr  & ~MPSSE_TD_MASK;
-	}
-	platform_buffer_write(cmd, index);
-}
-
 bool swdptap_bit_in(void)
 {
-	swdptap_turnaround(1);
+	swdptap_turnaround(SWDIO_STATUS_FLOAT);
 	uint8_t cmd[4];
 	int index = 0;
+	bool result = false;
 
-	cmd[index++] = active_cable->bitbang_tms_in_port_cmd;
-	cmd[index++] = MPSSE_TMS_SHIFT;
-	cmd[index++] = 0;
-	cmd[index++] = 0;
-	platform_buffer_write(cmd, index);
-	uint8_t data[1];
-	platform_buffer_read(data, 1);
-	return (data[0] &= active_cable->bitbang_tms_in_pin);
+	if (do_mpsse) {
+		uint8_t cmd[2] = {MPSSE_DO_READ | MPSSE_LSB | MPSSE_BITMODE, 0};
+		platform_buffer_write(cmd, sizeof(cmd));
+		uint8_t data[1];
+		platform_buffer_read(data, sizeof(data));
+		result = (data[0] & 0x80);
+	} else {
+		cmd[index++] = active_cable->bitbang_tms_in_port_cmd;
+		cmd[index++] = MPSSE_TMS_SHIFT;
+		cmd[index++] = 0;
+		cmd[index++] = 0;
+		platform_buffer_write(cmd, index);
+		uint8_t data[1];
+		platform_buffer_read(data, sizeof(data));
+		result = (data[0] &= active_cable->bitbang_tms_in_pin);
+	}
+#ifdef DEBUG_SWD_BITS
+	DEBUG("%d", (result) ? 1 : 0);
+#endif
+	return result;
 }
 
 void swdptap_bit_out(bool val)
 {
-	swdptap_turnaround(0);
-	uint8_t cmd[3];
-
-	cmd[0] = MPSSE_TMS_SHIFT;
-	cmd[1] = 0;
-	cmd[2] = (val)? 1 : 0;
-	platform_buffer_write(cmd, 3);
+	swdptap_turnaround(SWDIO_STATUS_DRIVE);
+#ifdef DEBUG_SWD_BITS
+	DEBUG("%d", val);
+#endif
+	if (do_mpsse) {
+		uint8_t cmd[3] = {MPSSE_TDO_SHIFT, 0, (val)? 1:0};
+		platform_buffer_write(cmd, sizeof(cmd));
+	} else {
+		uint8_t cmd[3];
+		cmd[0] = MPSSE_TMS_SHIFT;
+		cmd[1] = 0;
+		cmd[2] = (val)? 1 : 0;
+		platform_buffer_write(cmd, sizeof(cmd));
+	}
 }
 
 bool swdptap_seq_in_parity(uint32_t *res, int ticks)
 {
-	int index = ticks + 1;
-	uint8_t cmd[4];
+	assert(ticks == 32);
+	swdptap_turnaround(SWDIO_STATUS_FLOAT);
 	unsigned int parity = 0;
+	unsigned int result = 0;
+	if (do_mpsse) {
+		uint8_t DO[5];
+		jtagtap_tdi_tdo_seq(DO, 0, NULL, ticks + 1);
+		result = DO[0] + (DO[1] << 8) + (DO[2] << 16) + (DO[3] << 24);
+		for (int i = 0; i < 32; i++) {
+			parity ^= (result >> i) & 1;
+		}
+		parity ^= DO[4] & 1;
+	} else {
+		int index = ticks + 1;
+		uint8_t cmd[4];
 
-	cmd[0] = active_cable->bitbang_tms_in_port_cmd;
-	cmd[1] = MPSSE_TMS_SHIFT;
-	cmd[2] = 0;
-	cmd[3] = 0;
-	swdptap_turnaround(1);
-	while (index--) {
-		platform_buffer_write(cmd, 4);
-	}
-	uint8_t data[33];
-	unsigned int ret = 0;
-	platform_buffer_read(data, ticks + 1);
-	if (data[ticks] & active_cable->bitbang_tms_in_pin)
-		parity ^= 1;
-	while (ticks--) {
-		if (data[ticks] & active_cable->bitbang_tms_in_pin) {
+		cmd[0] = active_cable->bitbang_tms_in_port_cmd;
+		cmd[1] = MPSSE_TMS_SHIFT;
+		cmd[2] = 0;
+		cmd[3] = 0;
+		while (index--) {
+			platform_buffer_write(cmd, sizeof(cmd));
+		}
+		uint8_t data[33];
+		platform_buffer_read(data, ticks + 1);
+		if (data[ticks] & active_cable->bitbang_tms_in_pin)
 			parity ^= 1;
-			ret |= (1 << ticks);
+		index = ticks;
+		while (index--) {
+			if (data[index] & active_cable->bitbang_tms_in_pin) {
+				parity ^= 1;
+				result |= (1 << index);
+			}
 		}
 	}
-	*res = ret;
+#ifdef DEBUG_SWD_BITS
+	for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (result & (1 << i)) ? 1 : 0);
+#endif
+	*res = result;
 	return parity;
 }
 
 uint32_t swdptap_seq_in(int ticks)
 {
-	int index = ticks;
-	uint8_t cmd[4];
+	if (!ticks)
+		return 0;
+	uint32_t result = 0;
+	swdptap_turnaround(SWDIO_STATUS_FLOAT);
+	if (do_mpsse) {
+		uint8_t DO[4];
+		jtagtap_tdi_tdo_seq(DO, 0, NULL, ticks);
+		for (int i = 0; i < (ticks >> 3) + (ticks  & 7)? 1: 0; i++) {
+			result |= DO[i] << (8 * i);
+		}
+	} else {
+		int index = ticks;
+		uint8_t cmd[4];
 
-	cmd[0] = active_cable->bitbang_tms_in_port_cmd;
-	cmd[1] = MPSSE_TMS_SHIFT;
-	cmd[2] = 0;
-	cmd[3] = 0;
+		cmd[0] = active_cable->bitbang_tms_in_port_cmd;
+		cmd[1] = MPSSE_TMS_SHIFT;
+		cmd[2] = 0;
+		cmd[3] = 0;
 
-	swdptap_turnaround(1);
-	while (index--) {
-		platform_buffer_write(cmd, 4);
+		while (index--) {
+			platform_buffer_write(cmd, sizeof(cmd));
+		}
+		uint8_t data[32];
+		platform_buffer_read(data, ticks);
+		index = ticks;
+		while (index--) {
+			if (data[index] & active_cable->bitbang_tms_in_pin)
+				result |= (1 << index);
+		}
 	}
-	uint8_t data[32];
-	uint32_t ret = 0;
-	platform_buffer_read(data, ticks);
-	while (ticks--) {
-		if (data[ticks] & active_cable->bitbang_tms_in_pin)
-			ret |= (1 << ticks);
-	}
-	return ret;
+#ifdef DEBUG_SWD_BITS
+	for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (result & (1 << i)) ? 1 : 0);
+#endif
+	return result;
 }
 
 void swdptap_seq_out(uint32_t MS, int ticks)
 {
-	uint8_t cmd[15];
-	unsigned int index = 0;
-	swdptap_turnaround(0);
-	while (ticks) {
-		cmd[index++] = MPSSE_TMS_SHIFT;
-		if (ticks >= 7) {
-			cmd[index++] = 6;
-			cmd[index++] = MS & 0x7f;
-			MS >>= 7;
-			ticks -= 7;
-		} else {
-			cmd[index++] = ticks - 1;
-			cmd[index++] = MS & 0x7f;
-			ticks = 0;
+	if (!ticks)
+		return;
+	swdptap_turnaround(SWDIO_STATUS_DRIVE);
+#ifdef DEBUG_SWD_BITS
+	for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (MS & (1 << i)) ? 1 : 0);
+#endif
+	if (do_mpsse) {
+		uint8_t DI[4];
+		swdptap_turnaround(0);
+		DI[0] = (MS >>  0) & 0xff;
+		DI[1] = (MS >>  8) & 0xff;
+		DI[2] = (MS >> 16) & 0xff;
+		DI[3] = (MS >> 24) & 0xff;
+		jtagtap_tdi_tdo_seq(NULL, 0, DI, ticks);
+	} else {
+		uint8_t cmd[15];
+		unsigned int index = 0;
+		while (ticks) {
+			cmd[index++] = MPSSE_TMS_SHIFT;
+			if (ticks >= 7) {
+				cmd[index++] = 6;
+				cmd[index++] = MS & 0x7f;
+				MS >>= 7;
+				ticks -= 7;
+			} else {
+				cmd[index++] = ticks - 1;
+				cmd[index++] = MS & 0x7f;
+				ticks = 0;
+			}
 		}
+		platform_buffer_write(cmd, index);
 	}
-	platform_buffer_write(cmd, index);
 }
 
 void swdptap_seq_out_parity(uint32_t MS, int ticks)
 {
-	uint8_t parity = 0;
-	int steps = ticks;
-	uint8_t cmd[18];
-	unsigned int index = 0;
-	uint32_t data = MS;
+	unsigned int parity = 0;
 	swdptap_turnaround(0);
-	while (steps) {
-		cmd[index++] = MPSSE_TMS_SHIFT;
-		if (steps >= 7) {
-			cmd[index++] = 6;
-			cmd[index++] = data & 0x7f;
-			data >>= 7;
-			steps -= 7;
-		} else {
-			cmd[index++] = steps - 1;
-			cmd[index++] = data & 0x7f;
-			steps = 0;
+#ifdef DEBUG_SWD_BITS
+	for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (MS & (1 << i)) ? 1 : 0);
+#endif
+	if (do_mpsse) {
+		uint8_t DI[5];
+		DI[0] = (MS >>  0) & 0xff;
+		DI[1] = (MS >>  8) & 0xff;
+		DI[2] = (MS >> 16) & 0xff;
+		DI[3] = (MS >> 24) & 0xff;
+		while(MS) {
+			parity ^= (MS & 1);
+			MS >>= 1;
 		}
+		DI[4] = parity;
+		jtagtap_tdi_tdo_seq(NULL, 0, DI, ticks + 1);
+	} else {
+		int steps = ticks;
+		uint8_t cmd[18];
+		unsigned int index = 0;
+		unsigned int data = MS;
+		while (steps) {
+			cmd[index++] = MPSSE_TMS_SHIFT;
+			if (steps >= 7) {
+				cmd[index++] = 6;
+				cmd[index++] = data & 0x7f;
+				data >>= 7;
+				steps -= 7;
+			} else {
+				cmd[index++] = steps - 1;
+				cmd[index++] = data & 0x7f;
+				steps = 0;
+			}
+		}
+		while (ticks--) {
+			parity ^= MS;
+			MS >>= 1;
+		}
+		cmd[index++] = MPSSE_TMS_SHIFT;
+		cmd[index++] = 0;
+		cmd[index++] = parity;
+		platform_buffer_write(cmd, index);
 	}
-	while (ticks--) {
-		parity ^= MS;
-		MS >>= 1;
-	}
-	cmd[index++] = MPSSE_TMS_SHIFT;
-	cmd[index++] = 0;
-	cmd[index++] = parity;
-	platform_buffer_write(cmd, index);
 }
