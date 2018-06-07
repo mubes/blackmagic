@@ -80,7 +80,10 @@ cable_desc_t cable_desc[] = {
 		.dbus_data = 0x6A,
 		.dbus_ddr  = 0x6B,
 		.cbus_data = 0x02,
-		.cbus_ddr  = 0x02,
+		/* Keep nSRST Floating. Needed for I_KEPCO_MCA.
+		 * Internal Pull Up will keep nSRST high on
+		 * normal FTDISWD. */
+		.cbus_ddr  = 0x00,
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
 		.bitbang_tms_in_pin = MPSSE_TDO, /* keep bit 5 low*/
 		.bitbang_swd_dbus_read_data = 0x02,
