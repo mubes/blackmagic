@@ -1,5 +1,6 @@
 SYS = $(shell $(CC) -dumpmachine)
 CFLAGS += -DPC_HOSTED -DNO_LIBOPENCM3 -DENABLE_DEBUG
+CFLAGS += -Wno-missing-field-initializers
 LDFLAGS += -lftdi1
 ifneq (, $(findstring mingw, $(SYS)))
 LDFLAGS +=  -lusb-1.0 -lws2_32
