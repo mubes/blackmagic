@@ -87,6 +87,8 @@ cable_desc_t cable_desc[] = {
 		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
 		.bitbang_tms_in_pin = MPSSE_TDO, /* keep bit 5 low*/
 		.bitbang_swd_dbus_read_data = 0x02,
+		.assert_srst   = {0, 0, ~PIN1,  PIN1},
+		.deassert_srst = {0, 0,  PIN1, ~PIN1},
 		.name = "ftdiswd"
 	},
 	{
@@ -259,11 +261,77 @@ void platform_init(int argc, char **argv)
 
 void platform_srst_set_val(bool assert)
 {
-	(void)assert;
-	platform_buffer_flush();
+	uint8_t *srst_tupple;
+	uint8_t cmd[3] = {0};
+	if (assert)
+		srst_tupple = active_cable->assert_srst;
+	else
+		srst_tupple = active_cable->deassert_srst;
+	if (srst_tupple[0] || srst_tupple[1]) {
+		/* SRST is on dbus. Modify dbus_data and dbus_ddr.*/
+		if ((srst_tupple[0] < 0x7f) ||
+			(srst_tupple[0] == PIN7)) {
+			active_cable->dbus_data |= srst_tupple[0];
+		} else
+			active_cable->dbus_data &= srst_tupple[0];
+		if ((srst_tupple[1] < 0x7f) ||
+			(srst_tupple[1] == PIN7)) {
+			active_cable->dbus_ddr  |= srst_tupple[1];
+		} else
+			active_cable->dbus_ddr  &= srst_tupple[1];
+		cmd[0] = SET_BITS_LOW;
+		cmd[1] = active_cable->dbus_data;
+		cmd[2] = active_cable->dbus_ddr;
+		platform_buffer_write(cmd, 3);
+		platform_buffer_flush();
+	} else if (srst_tupple[2] || srst_tupple[3]) {
+		/* SRST is on dbus. Modify dbus_data and dbus_ddr.*/
+		if ((srst_tupple[2] < 0x7f) ||
+			(srst_tupple[2] == PIN7)) {
+			active_cable->cbus_data |= srst_tupple[2];
+		} else
+			active_cable->cbus_data &= srst_tupple[2];
+		if ((srst_tupple[3] < 0x7f) ||
+			(srst_tupple[3] == PIN7)) {
+			active_cable->cbus_ddr  |= srst_tupple[3];
+		} else
+			active_cable->cbus_ddr  &= srst_tupple[3];
+		cmd[0] = SET_BITS_HIGH;
+		cmd[1] = active_cable->cbus_data;
+		cmd[2] = active_cable->cbus_ddr;
+	}
+	if (cmd[0]) {
+		platform_buffer_write(cmd, 3);
+		platform_buffer_flush();
+	}
 }
 
-bool platform_srst_get_val(void) { return false; }
+bool platform_srst_get_val(void)
+{
+	uint8_t cmd[1] = {0};
+	uint8_t pin = 0;
+	if (active_cable->srst_get_port_cmd && active_cable->srst_get_pin) {
+		cmd[0]= active_cable->srst_get_port_cmd;
+		pin   =  active_cable->srst_get_pin;
+	} else if (active_cable->assert_srst[0] && active_cable->assert_srst[1]) {
+		cmd[0]= GET_BITS_LOW;
+		pin   = active_cable->assert_srst[0];
+	} else if (active_cable->assert_srst[2] && active_cable->assert_srst[3]) {
+		cmd[0]= GET_BITS_HIGH;
+		pin   = active_cable->assert_srst[2];
+	}else {
+		return false;
+	}
+	platform_buffer_write(cmd, 1);
+	uint8_t data[1];
+	platform_buffer_read(data, 1);
+	bool res = false;
+	if (((pin < 0x7f) || (pin == PIN7)))
+		res = data[0] & pin;
+	else
+		res = !(data[0] & ~pin);
+	return res;
+}
 
 void platform_buffer_flush(void)
 {

@@ -60,6 +60,20 @@ typedef struct cable_desc_s {
 	uint8_t bitbang_tms_in_port_cmd;
 	uint8_t bitbang_tms_in_pin;
 	uint8_t bitbang_swd_dbus_read_data;
+	uint8_t bitbang_swd_direct;
+	/* dbus_data, dbus_ddr, cbus_data, cbus_ddr value to assert SRST.
+	 *	E.g. with CBUS Pin 1 low asserting SRST,
+	 *	give {0, 0, ~PIN1, PIN1} */
+	uint8_t assert_srst[4];
+	/* dbus_data, dbus_ddr, cbus_data, cbus_ddr value to release SRST.
+	 *	E.g. with CBUS Pin 1 floating with internal pull up,
+	 *	give {0, 0, PIN1, ~PIN1} */
+	uint8_t deassert_srst[4];
+	/* Command to read back SRST. Keep 0 if no dedicated pin.*/
+	uint8_t srst_get_port_cmd;
+	/* PIN to read back as SRST. Keep 0 if no dedicated pin.
+	*  Use PINX if active high, use Complement (~PINX) if active low*/
+	uint8_t srst_get_pin;
 	/* bitbang_swd_dbus_read_data is same as dbus_data,
 	 * as long as CBUS is not involved.*/
 	char *description;
@@ -73,9 +87,17 @@ static inline int platform_hwversion(void)
 	        return 0;
 }
 
+#define MPSSE_TCK 1
+#define PIN0      1
 #define MPSSE_TDI 2
+#define PIN1      2
 #define MPSSE_TDO 4
+#define PIN2      4
 #define MPSSE_TMS 8
-
+#define PIN3      8
+#define PIN4      0x10
+#define PIN5      0x20
+#define PIN6      0x40
+#define PIN7      0x80
 #endif
 
