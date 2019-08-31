@@ -45,8 +45,9 @@ SRC =			\
 	nrf51.c		\
 	nxpke04.c	\
 	platform.c	\
+	remote.c        \
 	sam3x.c		\
-	sam4l.c	\
+	sam4l.c	        \
 	samd.c		\
 	stm32f1.c	\
 	stm32f4.c	\
