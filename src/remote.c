@@ -74,7 +74,7 @@ void remotePacketProcess(uint8_t i, char *packet)
 {
   uint8_t ticks;
   uint32_t param;
-  bool goodParity;
+  bool badParity;
   
   switch (packet[0])
     {
@@ -95,8 +95,8 @@ void remotePacketProcess(uint8_t i, char *packet)
 	  
 	case REMOTE_SWDP_IN_PAR: /* SI = In parity ================================== */
 	  ticks=remotehston(2,&packet[2]);
-	  goodParity=swdptap_seq_in_parity(&param, ticks);
-	  _respond(goodParity?REMOTE_RESP_OK:REMOTE_RESP_PARERR,param);
+	  badParity=swdptap_seq_in_parity(&param, ticks);
+	  _respond(badParity?REMOTE_RESP_PARERR:REMOTE_RESP_OK,param);
 	  break;
 	  
 	case REMOTE_SWDP_IN: /* Si = In ========================================= */

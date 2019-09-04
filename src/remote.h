@@ -48,26 +48,6 @@
  * to be marshalled in remote.c, swdptap.c and jtagtap.c, so be 
  * careful to ensure the parameter handling matches the protocol
  * definition when anything is changed.
- *
- *  Si - swdptap_seq_in
- *         tt - Ticks
- *       e.g. Si21 : Request input no parity, 33 ticks
- *       resp: K<PARAM> - hex value returned.
- *             X<err>   - Error occured
- *
- *  SO - swdptap_seq_out_parity
- *         tt - Ticks
- *         vvv - Value
- *       e.g. SO201234 - Write value 0x1234 over 32 ticks (high order bits are zero
- *       resp: S - Completed
- *             X<err> - Error occured
- *
- *  So - swdptap_seq_out
- *         tt - Ticks
- *         vvv - Value
- *       e.g. So201234 - Write value 0x1234 over 32 ticks (high order bits are zero)
- *       resp: S - Completed
- *             X<err> - Error occured
  */
 
 /* Protocol error messages */
@@ -82,7 +62,7 @@
 /* SWDP protocol elements */
 #define REMOTE_SWDP_PACKET 'S'
 #define REMOTE_SWDP_INIT   'S'
-#define REMOTE_SWDP_INIT_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_INIT, REMOTE_EOM, 0 }
+#define REMOTE_SWDP_INIT_STR (char []){ REMOTE_EOM, REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_INIT, REMOTE_EOM, 0 }
 
 #define REMOTE_SWDP_IN_PAR 'I'
 #define REMOTE_SWDP_IN_PAR_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_IN_PAR, \
