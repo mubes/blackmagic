@@ -34,6 +34,7 @@ static uint8_t outbuf[BUF_SIZE];
 static uint16_t bufptr = 0;
 
 cable_desc_t *active_cable;
+data_desc_t active_state;
 
 cable_desc_t cable_desc[] = {
 	{
@@ -42,10 +43,9 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_A,
-		.dbus_data = PIN6 | MPSSE_CS | MPSSE_DO | MPSSE_DI,
-		.dbus_ddr  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
-		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_CS,
+		.init.data_low = PIN6, /* PULL nRST high*/
+		.bb_swdio_in_port_cmd = GET_BITS_LOW,
+		.bb_swdio_in_pin = MPSSE_CS,
 		.assert_srst.data_low   = ~PIN6,
 		.assert_srst.ddr_low    =  PIN6,
 		.deassert_srst.data_low =  PIN6,
@@ -64,41 +64,40 @@ cable_desc_t cable_desc[] = {
 		.vendor  = 0x0403,
 		.product = 0x6014,/*FT232H*/
 		.interface = INTERFACE_A,
-		.dbus_data = MPSSE_DO | MPSSE_DI | MPSSE_CS,
-		.dbus_ddr  = MPSSE_SK,
-		.swd_read.set_data_low  = MPSSE_DO,
-		.swd_write.set_data_low = MPSSE_DO,
+		.mpsse_swd_read.set_data_low  = MPSSE_DO,
+		.mpsse_swd_write.set_data_low = MPSSE_DO,
 		.name = "ft232h_resistor_swd"
 	},
 	{
 		/* Buffered connection from FTDI to Jtag/Swd.
 		 * TCK and TMS not independant switchable!
 		 * SWD not possible.
-		 * DBUS PIN6 : SRST readback.
-		 * CBUS PIN1 : Drive SRST
-		 * CBUS PIN4 : not tristate SRST
+		 * PIN4 low enables buffers
+		 * PIN5 Low indicates VRef applied
+		 * PIN6 reads back SRST
+		 * CBUS PIN1 Sets SRST
+		 * CBUS PIN2 low drives SRST
 		 */
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_A,
-		.dbus_data = PIN4 | MPSSE_CS | MPSSE_DI | MPSSE_DO,
-		.dbus_ddr  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
-		.cbus_data = PIN4 | PIN3 | PIN2,
-		.cbus_ddr  = PIN4 | PIN3 |PIN2 | PIN1 | PIN0,
-		.assert_srst.data_high  =  ~PIN3,
-		.deassert_srst.data_high =  PIN3,
+		.init.data_low = PIN4,
+		.init.data_high = PIN4 | PIN3 | PIN2,
+		.init.ddr_high = PIN4 | PIN3 | PIN2 | PIN1 | PIN0,
+		.assert_srst.data_high   = ~PIN2,
+		.deassert_srst.data_high =  PIN2,
 		.srst_get_port_cmd = GET_BITS_LOW,
-		.srst_get_pin = ~PIN6,
+		.srst_get_pin = PIN6,
 		.description = "FTDIJTAG",
 		.name = "ftdijtag"
 	},
 	{
 /* UART/SWO on Interface A
  * JTAG and control on INTERFACE_B
- * Bit 5 high selects SWD-WRITE (TMS routed to TDO)
- * Bit 6 high selects JTAG vs SWD (TMS routed to TDI/TDO)
+ * Bit 5 high selects SWD-WRITE (TMS routed to MPSSE_DI)
+ * Bit 6 high selects JTAG vs SWD (TMS routed to MPSSE_CS)
  * BCBUS 1 (Output) N_SRST
- * BCBUS 2 (Input) V_ISO available
+ * BCBUS 2 (Input/ Internal Pull Up) V_ISO available
  *
  * For bitbanged SWD, set Bit 5 low and select SWD read with
  * Bit 6 low. Read Connector TMS as MPSSE_DI.
@@ -110,42 +109,46 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6010,
 		.interface = INTERFACE_B,
-		.dbus_data = PIN6 | PIN5 | MPSSE_CS | MPSSE_DO | MPSSE_DI,
-		.dbus_ddr  = PIN6 | PIN5 | MPSSE_CS | MPSSE_DO | MPSSE_SK,
-		.cbus_data = PIN1 | PIN2,
-		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_DI, /* keep bit 5 low*/
-		.bitbang_swd_dbus_read_data = MPSSE_DO,
-		.assert_srst.data_high   = ~PIN1,
-		.assert_srst.ddr_high    =  PIN1,
-		.deassert_srst.data_high =  PIN1,
-		.deassert_srst.ddr_high  = ~PIN1,
-		.swd_read.clr_data_low   = PIN5 | PIN6,
-		.swd_write.set_data_low  = PIN5,
-		.swd_write.clr_data_low  = PIN6,
+		.init.data_low = PIN6 | PIN5,
+		.init.ddr_low  = PIN6 | PIN5,
+		.init.data_high = PIN1 | PIN2,
+		.assert_srst.data_high     = ~PIN1,
+		.assert_srst.ddr_high      =  PIN1,
+		.deassert_srst.data_high   =  PIN1,
+		.deassert_srst.ddr_high    = ~PIN1,
+		.mpsse_swd_read.clr_data_low  = PIN5 | PIN6,
+		.mpsse_swd_write.set_data_low = PIN5,
+		.mpsse_swd_write.clr_data_low = PIN6,
+		.jtag.set_data_low            = PIN6,
 		.name = "ftdiswd"
 	},
 	{
 		.vendor = 0x15b1,
 		.product = 0x0003,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
+		.init.ddr_low  = PIN5,
 		.name = "olimex"
 	},
 	{
 		/* Buffered connection from FTDI to Jtag/Swd.
 		 * TCK and TMS not independant switchable!
-		 * => SWD not possible. */
+		 * => SWD not possible.
+		 * DBUS PIN4 / JTAGOE low enables buffers
+		 * DBUS PIN5 / TRST high drives nTRST low OC
+		 * DBUS PIN6 / RST high drives nSRST low OC
+		 * CBUS PIN0 reads back SRST
+		 */
 		.vendor = 0x0403,
 		.product = 0xbdc8,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
-		.assert_srst.data_low = 0x40,
-		.deassert_srst.data_low = ~0x40,
+		/* Drive low to activate JTAGOE and deassert TRST/RST.*/
+		.init.data_low  = PIN6,
+		.init.ddr_low  = PIN6 | PIN5 | PIN4,
+		.init.ddr_high = PIN2, /* ONE LED */
+		.assert_srst.data_low = PIN6,
+		.deassert_srst.data_low = ~PIN6,
 		.srst_get_port_cmd = GET_BITS_HIGH,
-		.srst_get_pin = 0x01,
+		.srst_get_pin = PIN0,
 		.name = "turtelizer"
 	},
 	{
@@ -157,8 +160,6 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0xbdc8,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
 		.name = "jtaghs1"
 	},
 	{
@@ -166,10 +167,10 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0xbdc8,
 		.interface = INTERFACE_A,
-		.dbus_data = 0xA8,
-		.dbus_ddr  = 0xAB,
-		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_CS,
+		.init.data_low = MPSSE_CS | MPSSE_DO | MPSSE_DI,
+		.init.ddr_low  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
+		.bb_swdio_in_port_cmd = GET_BITS_LOW,
+		.bb_swdio_in_pin = MPSSE_CS,
 		.name = "ftdi"
 	},
 	{
@@ -177,10 +178,10 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6014,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x88,
-		.dbus_ddr  = 0x8B,
-		.cbus_data = 0x20,
-		.cbus_ddr  = 0x3f,
+		.init.data_low = PIN7,
+		.init.ddr_low = PIN7,
+		.init.data_high = PIN5,
+		.init.ddr_high = PIN5 | PIN4 | PIN3 | PIN2 | PIN1 | PIN0,
 		.name = "digilent"
 	},
 	{
@@ -188,10 +189,10 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6014,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x0B,
-		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_CS,
+		.init.data_low = MPSSE_CS | MPSSE_DO | MPSSE_DI,
+		.init.ddr_low  = MPSSE_CS | MPSSE_DO | MPSSE_SK,
+		.bb_swdio_in_port_cmd = GET_BITS_LOW,
+		.bb_swdio_in_pin = MPSSE_CS,
 		.name = "ft232h"
 	},
 	{
@@ -199,24 +200,21 @@ cable_desc_t cable_desc[] = {
 		.vendor = 0x0403,
 		.product = 0x6011,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x0B,
-		.bitbang_tms_in_port_cmd = GET_BITS_LOW,
-		.bitbang_tms_in_pin = MPSSE_CS,
+		.bb_swdio_in_port_cmd = GET_BITS_LOW,
+		.bb_swdio_in_pin = MPSSE_CS,
 		.name = "ft4232h"
 	},
 	{
 		/* http://www.olimex.com/dev/pdf/ARM-USB-OCD.pdf.
-		 * BDUS 4 global enables JTAG Buffer.
+		 * DBUS 4 global enables JTAG Buffer.
 		 * => TCK and TMS not independant switchable!
 		 * => SWD not possible. */
 		.vendor = 0x15ba,
 		.product = 0x002b,
 		.interface = INTERFACE_A,
-		.dbus_data = 0x08,
-		.dbus_ddr  = 0x1B,
-		.cbus_data = 0x00,
-		.cbus_ddr  = 0x08,
+		.init.ddr_low = PIN4,
+		.init.data_high = PIN3 | PIN1 | PIN0,
+		.init.ddr_high =  PIN4 | PIN3 | PIN1 | PIN0,
 		.name = "arm-usb-ocd-h"
 	},
 };
@@ -250,6 +248,7 @@ void platform_init(int argc, char **argv)
 	}
 
 	active_cable = &cable_desc[index];
+	memcpy(&active_state, &active_cable->init, sizeof(data_desc_t));
 
 	printf("\nBlack Magic Probe (" FIRMWARE_VERSION ")\n");
 	printf("Copyright (C) 2015  Black Sphere Technologies Ltd.\n");
@@ -294,6 +293,40 @@ void platform_init(int argc, char **argv)
 			err, ftdi_get_error_string(ftdic));
 		abort();
 	}
+	assert(ftdic != NULL);
+	err = ftdi_usb_purge_buffers(ftdic);
+	if (err != 0) {
+		fprintf(stderr, "ftdi_usb_purge_buffer: %d: %s\n",
+			err, ftdi_get_error_string(ftdic));
+		abort();
+	}
+	/* Reset MPSSE controller. */
+	err = ftdi_set_bitmode(ftdic, 0,  BITMODE_RESET);
+	if (err != 0) {
+		fprintf(stderr, "ftdi_set_bitmode: %d: %s\n",
+			err, ftdi_get_error_string(ftdic));
+		abort();
+	}
+	/* Enable MPSSE controller. Pin directions are set later.*/
+	err = ftdi_set_bitmode(ftdic, 0, BITMODE_MPSSE);
+	if (err != 0) {
+		fprintf(stderr, "ftdi_set_bitmode: %d: %s\n",
+			err, ftdi_get_error_string(ftdic));
+		abort();
+	}
+	uint8_t ftdi_init[9];
+	ftdi_init[0]= TCK_DIVISOR;
+	/* Use CLK/2 for about 50 % SWDCLK duty cycle on FT2232c.*/
+	ftdi_init[1]= 1;
+	ftdi_init[3]= SET_BITS_LOW;
+	ftdi_init[4]= active_state.data_low;
+	ftdi_init[5]= active_state.ddr_low;
+	ftdi_init[6]= SET_BITS_HIGH;
+	ftdi_init[7]= active_state.data_high;
+	ftdi_init[8]= active_state.ddr_high;
+	platform_buffer_write(ftdi_init, 9);
+	platform_buffer_flush();
+
 	assert(gdb_if_init() == 0);
 }
 
@@ -303,29 +336,29 @@ void platform_set_data(data_desc_t* data)
 	int index = 0;
 	if ((data->data_low) || (data->ddr_low)) {
 		if (data->data_low > 0)
-			active_cable->dbus_data |= (data->data_low & 0xff);
+			active_state.data_low |= (data->data_low & 0xff);
 		else
-			active_cable->dbus_data &= (data->data_low & 0xff);
+			active_state.data_low &= (data->data_low & 0xff);
 		if (data->ddr_low > 0)
-			active_cable->dbus_ddr  |= (data->ddr_low  & 0xff);
+			active_state.ddr_low  |= (data->ddr_low  & 0xff);
 		else
-			active_cable->dbus_ddr  &= (data->ddr_low  & 0xff);
+			active_state.ddr_low  &= (data->ddr_low  & 0xff);
 		cmd[index++] = SET_BITS_LOW;
-		cmd[index++] = active_cable->dbus_data;
-		cmd[index++] = active_cable->dbus_ddr;
+		cmd[index++] = active_state.data_low;
+		cmd[index++] = active_state.ddr_low;
 	}
 	if ((data->data_high) || (data->ddr_high)) {
 		if (data->data_high > 0)
-			active_cable->cbus_data |= (data->data_high & 0xff);
+			active_state.data_high |= (data->data_high & 0xff);
 		else
-			active_cable->cbus_data &= (data->data_high & 0xff);
+			active_state.data_high &= (data->data_high & 0xff);
 		if (data->ddr_high > 0)
-			active_cable->cbus_ddr  |= (data->ddr_high  & 0xff);
+			active_state.ddr_high  |= (data->ddr_high  & 0xff);
 		else
-			active_cable->cbus_ddr  &= (data->ddr_high  & 0xff);
+			active_state.ddr_high  &= (data->ddr_high  & 0xff);
 		cmd[index++] = SET_BITS_HIGH;
-		cmd[index++] = active_cable->cbus_data;
-		cmd[index++] = active_cable->cbus_ddr;
+		cmd[index++] = active_state.data_high;
+		cmd[index++] = active_state.ddr_high;
 	}
 	if (index) {
 		platform_buffer_write(cmd, index);

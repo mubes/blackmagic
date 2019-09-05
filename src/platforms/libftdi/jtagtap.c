@@ -20,8 +20,6 @@
 
 /* Low level JTAG implementation using FT2232 with libftdi.
  *
- * Issues:
- * Should share interface with swdptap.c or at least clean up...
  */
 
 #include <stdio.h>
@@ -35,41 +33,25 @@
 
 int jtagtap_init(void)
 {
-	if ((active_cable->swd_read.set_data_low == MPSSE_DO) &&
-		(active_cable->swd_write.set_data_low == MPSSE_DO)) {
+	if ((active_cable->mpsse_swd_read.set_data_low == MPSSE_DO) &&
+		(active_cable->mpsse_swd_write.set_data_low == MPSSE_DO)) {
 		printf("Jtag not possible with resistor SWD!\n");
 			return -1;
 	}
-	assert(ftdic != NULL);
-	int err = ftdi_usb_purge_buffers(ftdic);
-	if (err != 0) {
-		fprintf(stderr, "ftdi_usb_purge_buffer: %d: %s\n",
-			err, ftdi_get_error_string(ftdic));
-		abort();
-	}
-	/* Reset MPSSE controller. */
-	err = ftdi_set_bitmode(ftdic, 0,  BITMODE_RESET);
-	if (err != 0) {
-		fprintf(stderr, "ftdi_set_bitmode: %d: %s\n",
-			err, ftdi_get_error_string(ftdic));
-		return -1;;
-	}
-	/* Enable MPSSE controller. Pin directions are set later.*/
-	err = ftdi_set_bitmode(ftdic, 0, BITMODE_MPSSE);
-	if (err != 0) {
-		fprintf(stderr, "ftdi_set_bitmode: %d: %s\n",
-			err, ftdi_get_error_string(ftdic));
-		return -1;;
-	}
-	uint8_t ftdi_init[9] = {TCK_DIVISOR, 0x00, 0x00, SET_BITS_LOW, 0,0,
-				SET_BITS_HIGH, 0,0};
-	ftdi_init[4]= active_cable->dbus_data;
-	ftdi_init[5]= active_cable->dbus_ddr;
-	ftdi_init[7]= active_cable->cbus_data;
-	ftdi_init[8]= active_cable->cbus_ddr;
-	platform_buffer_write(ftdi_init, 9);
-	platform_buffer_flush();
-
+	active_state.data_low  |=   active_cable->jtag.set_data_low |
+		MPSSE_CS | MPSSE_DI | MPSSE_DO;
+	active_state.data_low  &= ~(active_cable->jtag.clr_data_low | MPSSE_SK);
+	active_state.ddr_low   |=   MPSSE_CS | MPSSE_DO | MPSSE_SK;
+	active_state.ddr_low   &= ~(MPSSE_DI);
+	active_state.data_high |=   active_cable->jtag.set_data_high;
+	active_state.data_high &= ~(active_cable->jtag.clr_data_high);
+	DEBUG("%02x %02x %02x %02x\n", active_state.data_low ,
+		  active_state.ddr_low, active_state.data_high,
+		  active_state.ddr_high);uint8_t cmd_write[6] = {
+		SET_BITS_LOW,  active_state.data_low,
+		active_state.ddr_low,
+		SET_BITS_HIGH, active_state.data_high, active_state.ddr_high};
+	platform_buffer_write(cmd_write, 6);
 	/* Go to JTAG mode for SWJ-DP */
 	for (int i = 0; i <= 50; i++)
 		jtagtap_next(1, 0);		/* Reset SW-DP */
