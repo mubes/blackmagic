@@ -70,7 +70,7 @@ bool swdptap_seq_in_parity(uint32_t *res, int ticks)
   }
   
   *res=remotehston(-1,(char *)&construct[1]);
-  return (construct[0]==REMOTE_RESP_OK);
+  return (construct[0]!=REMOTE_RESP_OK);
 }
 
 
