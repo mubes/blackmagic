@@ -226,13 +226,17 @@ void platform_init(int argc, char **argv)
 	unsigned index = 0;
 	char *serial = NULL;
 	char * cablename =  "ftdi";
-	while((c = getopt(argc, argv, "c:s:")) != -1) {
+	bool external_resistor_swd = false;
+	while ((c = getopt(argc, argv, "c:s:r")) != -1) {
 		switch(c) {
 		case 'c':
 			cablename =  optarg;
 			break;
 		case 's':
 			serial = optarg;
+			break;
+		case 'r':
+			external_resistor_swd = true;
 			break;
 		}
 	}
@@ -249,6 +253,22 @@ void platform_init(int argc, char **argv)
 
 	active_cable = &cable_desc[index];
 	memcpy(&active_state, &active_cable->init, sizeof(data_desc_t));
+	/* If swd_(read|write) is not given for the selected cable and
+	   the 'r' command line argument is give, assume resistor SWD
+	   connection.*/
+	if (external_resistor_swd &&
+		(active_cable->mpsse_swd_read.set_data_low  == 0) &&
+		(active_cable->mpsse_swd_read.clr_data_low  == 0) &&
+		(active_cable->mpsse_swd_read.set_data_high == 0) &&
+		(active_cable->mpsse_swd_read.clr_data_high == 0) &&
+		(active_cable->mpsse_swd_write.set_data_low  == 0) &&
+		(active_cable->mpsse_swd_write.clr_data_low  == 0) &&
+		(active_cable->mpsse_swd_write.set_data_high == 0) &&
+		(active_cable->mpsse_swd_write.clr_data_high == 0)) {
+			DEBUG("Using external resistor SWD\n");
+			active_cable->mpsse_swd_read.set_data_low = MPSSE_DO;
+			active_cable->mpsse_swd_write.set_data_low = MPSSE_DO;
+		}
 
 	printf("\nBlack Magic Probe (" FIRMWARE_VERSION ")\n");
 	printf("Copyright (C) 2015  Black Sphere Technologies Ltd.\n");
