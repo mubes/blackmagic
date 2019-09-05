@@ -139,7 +139,6 @@ int platform_buffer_write(const uint8_t *data, int size)
 {
   int s;
 
-  printf("Out [%s]\n",data);
   s=write(f,data,size);
   if (s<0)
     {
@@ -208,7 +207,6 @@ int platform_buffer_read(uint8_t *data, int maxsize)
       if (*c==REMOTE_EOM)
 	{
 	  *c=0;
-	  printf("In [%s]\n",data);
 	  return (c-data);
 	}
       else

@@ -1,3 +1,4 @@
+TARGET=blackmagic_hosted
 SYS = $(shell $(CC) -dumpmachine)
 CFLAGS += -DPC_HOSTED -DNO_LIBOPENCM3 -DENABLE_DEBUG
 LDFLAGS += -lftdi1
