@@ -31,12 +31,63 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 
 /* Allow 100mS for responses to reach us */
-#define RESP_TIMEOUT (1000)
+#define RESP_TIMEOUT (100)
 
 
 static int f;  /* File descriptor for connection to GDB remote */
+
+int set_interface_attribs (int fd, int speed, int parity)
+
+/* A nice routine grabbed from
+ * https://stackoverflow.com/questions/6947413/how-to-open-read-and-write-from-serial-port-in-c
+ */
+
+{
+  struct termios tty;
+  memset (&tty, 0, sizeof tty);
+  if (tcgetattr (fd, &tty) != 0)
+    {
+      fprintf(stderr,"error %d from tcgetattr", errno);
+      return -1;
+    }
+
+  cfsetospeed (&tty, speed);
+  cfsetispeed (&tty, speed);
+
+  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
+  // disable IGNBRK for mismatched speed tests; otherwise receive break
+  // as \000 chars
+  tty.c_iflag &= ~IGNBRK;         // disable break processing
+  tty.c_lflag = 0;                // no signaling chars, no echo,
+  // no canonical processing
+  tty.c_oflag = 0;                // no remapping, no delays
+  tty.c_cc[VMIN]  = 0;            // read doesn't block
+  tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
+
+  tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls,
+  // enable reading
+  tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
+  tty.c_cflag |= parity;
+  tty.c_cflag &= ~CSTOPB;
+  tty.c_cflag &= ~CRTSCTS;
+
+  if (tcsetattr (fd, TCSANOW, &tty) != 0)
+    {
+      fprintf(stderr,"error %d from tcsetattr", errno);
+      return -1;
+    }
+  return 0;
+}
+
 
 void platform_init(int argc, char **argv)
 {
@@ -58,10 +109,15 @@ void platform_init(int argc, char **argv)
   
   assert(gdb_if_init() == 0);
   
-  f=open(serial,O_RDWR);
+  f=open(serial,O_RDWR|O_SYNC|O_NOCTTY);
   if (f<0)
     {
       fprintf(stderr,"Couldn't open serial port %s\n",serial);
+      exit(-1);
+    }
+
+  if (set_interface_attribs (f, 115000, 0)<0)
+    {
       exit(-1);
     }
 }
@@ -82,7 +138,8 @@ void platform_buffer_flush(void)
 int platform_buffer_write(const uint8_t *data, int size)
 {
   int s;
-  
+
+  printf("Out [%s]\n",data);
   s=write(f,data,size);
   if (s<0)
     {
@@ -151,6 +208,7 @@ int platform_buffer_read(uint8_t *data, int maxsize)
       if (*c==REMOTE_EOM)
 	{
 	  *c=0;
+	  printf("In [%s]\n",data);
 	  return (c-data);
 	}
       else
