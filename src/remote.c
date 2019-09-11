@@ -239,6 +239,15 @@ void remotePacketProcessGEN(uint8_t i, char *packet)
       _respond(REMOTE_RESP_OK,platform_srst_get_val());
       break;
 
+    case REMOTE_PWR_SET:
+      platform_target_set_power(packet[2]=='1');
+      _respond(REMOTE_RESP_OK,0);
+      break;
+
+    case REMOTE_PWR_GET:
+      _respond(REMOTE_RESP_OK,platform_target_get_power());
+      break;
+
     case REMOTE_START:
       _respondS(REMOTE_RESP_OK, BOARD_IDENT " " FIRMWARE_VERSION);
       break;

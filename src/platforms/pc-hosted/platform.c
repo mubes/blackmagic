@@ -137,6 +137,42 @@ void platform_init(int argc, char **argv)
   printf("Remote is %s\n",&construct[1]);
 }
 
+bool platform_target_get_power(void)
+{
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
+  int s;
+
+  s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,"%s",REMOTE_PWR_GET_STR);
+  platform_buffer_write(construct,s);
+
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!s) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"platform_target_get_power failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
+
+  return (construct[1]=='1');
+}
+
+void platform_target_set_power(bool power)
+{
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
+  int s;
+
+  s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,REMOTE_PWR_SET_STR,power?'1':'0');
+  platform_buffer_write(construct,s);
+
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!s) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"platform_target_set_power failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
+}
+
 void platform_srst_set_val(bool assert)
 {
   uint8_t construct[PLATFORM_MAX_MSG_SIZE];

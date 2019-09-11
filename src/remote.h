@@ -68,6 +68,8 @@
 #define REMOTE_NEXT         'N'
 #define REMOTE_OUT_PAR      'O'
 #define REMOTE_OUT          'o'
+#define REMOTE_PWR_SET      'P'
+#define REMOTE_PWR_GET      'p'
 #define REMOTE_RESET        'R'
 #define REMOTE_INIT         'S'
 #define REMOTE_TMS          'T'
@@ -89,6 +91,8 @@
 #define REMOTE_VOLTAGE_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_VOLTAGE, REMOTE_EOM, 0 }
 #define REMOTE_SRST_SET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_SRST_SET, '%', 'c', REMOTE_EOM, 0 }
 #define REMOTE_SRST_GET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_SRST_GET, REMOTE_EOM, 0 }
+#define REMOTE_PWR_SET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_PWR_SET, '%', 'c', REMOTE_EOM, 0 }
+#define REMOTE_PWR_GET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_PWR_GET, REMOTE_EOM, 0 }
 
 /* SWDP protocol elements */
 #define REMOTE_SWDP_PACKET 'S'
