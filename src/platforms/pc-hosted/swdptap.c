@@ -30,24 +30,21 @@
 #include "swdptap.h"
 #include "remote.h"
 
-
-#define MAX_MSG_SIZE (60)
-
 int swdptap_init(void)
 
 {
-  uint8_t construct[MAX_MSG_SIZE];
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
 
   s=sprintf((char *)construct,"%s",REMOTE_SWDP_INIT_STR);
   platform_buffer_write(construct,s);
   
-  s=platform_buffer_read(construct, MAX_MSG_SIZE);
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
   if ((!s) || (construct[0]==REMOTE_RESP_ERR))
-  {
-    fprintf(stderr,"swdptap_init failed, error %s\n",s?(char *)&(construct[1]):"unknown");
-    exit(-1);
-  }
+    {
+      fprintf(stderr,"swdptap_init failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
 
   return 0;
 }
@@ -56,18 +53,18 @@ int swdptap_init(void)
 bool swdptap_seq_in_parity(uint32_t *res, int ticks)
   
 {
-  uint8_t construct[MAX_MSG_SIZE];
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
 
   s=sprintf((char *)construct,REMOTE_SWDP_IN_PAR_STR,ticks);
   platform_buffer_write(construct,s);
 
-  s=platform_buffer_read(construct, MAX_MSG_SIZE);  
-    if ((s<2) || (construct[0]==REMOTE_RESP_ERR))
-  {
-    fprintf(stderr,"swdptap_seq_in_parity failed, error %s\n",s?(char *)&(construct[1]):"short response");
-    exit(-1);
-  }
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+  if ((s<2) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"swdptap_seq_in_parity failed, error %s\n",s?(char *)&(construct[1]):"short response");
+      exit(-1);
+    }
   
   *res=remotehston(-1,(char *)&construct[1]);
   return (construct[0]!=REMOTE_RESP_OK);
@@ -76,51 +73,51 @@ bool swdptap_seq_in_parity(uint32_t *res, int ticks)
 
 uint32_t swdptap_seq_in(int ticks)
 {
-  uint8_t construct[MAX_MSG_SIZE];
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
 
   s=sprintf((char *)construct,REMOTE_SWDP_IN_STR,ticks);
   platform_buffer_write(construct,s);
 
-  s=platform_buffer_read(construct, MAX_MSG_SIZE);  
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
   if ((s<2) || (construct[0]==REMOTE_RESP_ERR))
-  {
-    fprintf(stderr,"swdptap_seq_in failed, error %s\n",s?(char *)&(construct[1]):"short response");
-    exit(-1);
-  }
+    {
+      fprintf(stderr,"swdptap_seq_in failed, error %s\n",s?(char *)&(construct[1]):"short response");
+      exit(-1);
+    }
 
   return remotehston(-1,(char *)&construct[1]);
 }
 
 void swdptap_seq_out(uint32_t MS, int ticks)
 {
-  uint8_t construct[MAX_MSG_SIZE];
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
   
   s=sprintf((char *)construct,REMOTE_SWDP_OUT_STR,ticks,MS);
   platform_buffer_write(construct,s);
 
-  s=platform_buffer_read(construct, MAX_MSG_SIZE);
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
   if ((s<1) || (construct[0]==REMOTE_RESP_ERR))
-  {
-    fprintf(stderr,"swdptap_seq_out failed, error %s\n",s?(char *)&(construct[1]):"short response");
-    exit(-1);
-  }
+    {
+      fprintf(stderr,"swdptap_seq_out failed, error %s\n",s?(char *)&(construct[1]):"short response");
+      exit(-1);
+    }
 }
 
 
 void swdptap_seq_out_parity(uint32_t MS, int ticks)
 {
-  uint8_t construct[MAX_MSG_SIZE];
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
   
   s=sprintf((char *)construct,REMOTE_SWDP_OUT_PAR_STR,ticks,MS);
   platform_buffer_write(construct,s);
 
-  s=platform_buffer_read(construct, MAX_MSG_SIZE);
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
   if ((s<1) || (construct[1]==REMOTE_RESP_ERR))
-  {
-    fprintf(stderr,"swdptap_seq_out_parity failed, error %s\n",s?(char *)&(construct[2]):"short response");
-    exit(-1);
-  }
+    {
+      fprintf(stderr,"swdptap_seq_out_parity failed, error %s\n",s?(char *)&(construct[2]):"short response");
+      exit(-1);
+    }
 }

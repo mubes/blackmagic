@@ -59,34 +59,70 @@
 #define REMOTE_EOM         '#'
 #define REMOTE_RESP        '&'
 
-/* SWDP protocol elements */
-#define REMOTE_SWDP_PACKET 'S'
-#define REMOTE_SWDP_INIT   'S'
-#define REMOTE_SWDP_INIT_STR (char []){ '+',REMOTE_EOM, REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_INIT, REMOTE_EOM, 0 }
-
-#define REMOTE_SWDP_IN_PAR 'I'
-#define REMOTE_SWDP_IN_PAR_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_IN_PAR, \
-                                          '%','0','2','x',REMOTE_EOM, 0 }
-
-#define REMOTE_SWDP_IN 'i'
-#define REMOTE_SWDP_IN_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_IN, \
-                                      '%','0','2','x',REMOTE_EOM, 0 }
-
-#define REMOTE_SWDP_OUT 'o'
-#define REMOTE_SWDP_OUT_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_OUT, \
-                                       '%','0','2','x','%','x',REMOTE_EOM, 0 }
-
-#define REMOTE_SWDP_OUT_PAR 'O'
-#define REMOTE_SWDP_OUT_PAR_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_SWDP_OUT_PAR, \
-                                           '%','0','2','x','%','x',REMOTE_EOM, 0 }
+/* Generic protocol elements */
+#define REMOTE_START        'A'
+#define REMOTE_TDITDO_TMS   'D'
+#define REMOTE_TDITDO_NOTMS 'd'
+#define REMOTE_IN_PAR       'I'
+#define REMOTE_IN           'i'
+#define REMOTE_NEXT         'N'
+#define REMOTE_OUT_PAR      'O'
+#define REMOTE_OUT          'o'
+#define REMOTE_RESET        'R'
+#define REMOTE_INIT         'S'
+#define REMOTE_TMS          'T'
+#define REMOTE_VOLTAGE      'V'
+#define REMOTE_SRST_SET     'Z'
+#define REMOTE_SRST_GET     'z'
 
 /* Protocol response options */
-#define REMOTE_RESP_FORMAT "%c%1" PRIx32
+#define REMOTE_RESP_FORMAT "%c%" PRIx64
 #define REMOTE_RESP_OK     'K'
 #define REMOTE_RESP_PARERR 'P'
 #define REMOTE_RESP_ERR    'E'
+#define REMOTE_RESP_NOTSUP 'N'
 
-uint32_t remotehston(uint32_t limit, char *s);
+/* Generic protocol elements */
+#define REMOTE_GEN_PACKET  'G'
+
+#define REMOTE_START_STR (char []){ '+', REMOTE_EOM, REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_START, REMOTE_EOM, 0 }
+#define REMOTE_VOLTAGE_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_VOLTAGE, REMOTE_EOM, 0 }
+#define REMOTE_SRST_SET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_SRST_SET, '%', 'c', REMOTE_EOM, 0 }
+#define REMOTE_SRST_GET_STR (char []){ REMOTE_SOM, REMOTE_GEN_PACKET, REMOTE_SRST_GET, REMOTE_EOM, 0 }
+
+/* SWDP protocol elements */
+#define REMOTE_SWDP_PACKET 'S'
+#define REMOTE_SWDP_INIT_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_INIT, REMOTE_EOM, 0 }
+
+#define REMOTE_SWDP_IN_PAR_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_IN_PAR, \
+                                          '%','0','2','x',REMOTE_EOM, 0 }
+
+#define REMOTE_SWDP_IN_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_IN, \
+                                      '%','0','2','x',REMOTE_EOM, 0 }
+
+#define REMOTE_SWDP_OUT_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_OUT, \
+                                       '%','0','2','x','%','x',REMOTE_EOM, 0 }
+
+#define REMOTE_SWDP_OUT_PAR_STR (char []){ REMOTE_SOM, REMOTE_SWDP_PACKET, REMOTE_OUT_PAR, \
+                                           '%','0','2','x','%','x',REMOTE_EOM, 0 }
+
+/* JTAG protocol elements */
+#define REMOTE_JTAG_PACKET 'J'
+
+#define REMOTE_JTAG_INIT_STR (char []){ '+',REMOTE_EOM, REMOTE_SOM, REMOTE_JTAG_PACKET, REMOTE_INIT, REMOTE_EOM, 0 }
+
+#define REMOTE_JTAG_RESET_STR (char []){ '+',REMOTE_EOM, REMOTE_SOM, REMOTE_JTAG_PACKET, REMOTE_RESET, REMOTE_EOM, 0 }
+
+#define REMOTE_JTAG_TMS_STR (char []){ REMOTE_SOM, REMOTE_JTAG_PACKET, REMOTE_TMS, \
+                                           '%','0','2','x','%','x',REMOTE_EOM, 0 }
+
+#define REMOTE_JTAG_TDIDO_STR (char []){ REMOTE_SOM, REMOTE_JTAG_PACKET, '%', 'c', \
+      '%','0','2','x','%','l', 'x', REMOTE_EOM, 0 }
+
+#define REMOTE_JTAG_NEXT (char []){ REMOTE_SOM, REMOTE_JTAG_PACKET, REMOTE_NEXT, \
+                                       '%','c','%','c',REMOTE_EOM, 0 }
+
+uint64_t remotehston(uint32_t limit, char *s);
 void remotePacketProcess(uint8_t i, char *packet);
 
 #endif

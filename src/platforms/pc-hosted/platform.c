@@ -40,6 +40,8 @@
 /* Allow 100mS for responses to reach us */
 #define RESP_TIMEOUT (100)
 
+/* Define this to see the transactions across the link */
+//#define DUMP_TRANSACTIONS
 
 static int f;  /* File descriptor for connection to GDB remote */
 
@@ -92,6 +94,7 @@ int set_interface_attribs (int fd, int speed, int parity)
 void platform_init(int argc, char **argv)
 {
   int c;
+  char construct[PLATFORM_MAX_MSG_SIZE];
   char *serial = NULL;
   while((c = getopt(argc, argv, "s:")) != -1) {
     switch(c)
@@ -120,15 +123,56 @@ void platform_init(int argc, char **argv)
     {
       exit(-1);
     }
+
+  c=snprintf(construct,PLATFORM_MAX_MSG_SIZE,"%s",REMOTE_START_STR);
+  platform_buffer_write((uint8_t *)construct,c);
+  c=platform_buffer_read((uint8_t *)construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!c) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"Remote Start failed, error %s\n",c?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
+
+  printf("Remote is %s\n",&construct[1]);
 }
 
 void platform_srst_set_val(bool assert)
 {
-  (void)assert;
-  platform_buffer_flush();
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
+  int s;
+
+  s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,REMOTE_SRST_SET_STR,assert?'1':'0');
+  platform_buffer_write(construct,s);
+
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!s) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"platform_srst_set_val failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
 }
 
-bool platform_srst_get_val(void) { return false; }
+bool platform_srst_get_val(void)
+
+{
+  uint8_t construct[PLATFORM_MAX_MSG_SIZE];
+  int s;
+
+  s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,"%s",REMOTE_SRST_GET_STR);
+  platform_buffer_write(construct,s);
+
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!s) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"platform_srst_set_val failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
+
+  return (construct[1]=='1');
+}
 
 void platform_buffer_flush(void)
 {
@@ -139,6 +183,9 @@ int platform_buffer_write(const uint8_t *data, int size)
 {
   int s;
 
+#ifdef DUMP_TRANSACTIONS
+  printf("%s\n",data);
+#endif
   s=write(f,data,size);
   if (s<0)
     {
@@ -207,6 +254,9 @@ int platform_buffer_read(uint8_t *data, int maxsize)
       if (*c==REMOTE_EOM)
 	{
 	  *c=0;
+#ifdef DUMP_TRANSACTIONS
+	  printf("       %s\n",data);
+#endif
 	  return (c-data);
 	}
       else
@@ -234,8 +284,23 @@ int vasprintf(char **strp, const char *fmt, va_list ap)
 #endif
 
 const char *platform_target_voltage(void)
+
 {
-  return "not supported";
+  static uint8_t construct[80];
+  int s;
+
+  s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,"%s",REMOTE_VOLTAGE_STR);
+  platform_buffer_write(construct,s);
+
+  s=platform_buffer_read(construct, PLATFORM_MAX_MSG_SIZE);
+
+  if ((!s) || (construct[0]==REMOTE_RESP_ERR))
+    {
+      fprintf(stderr,"platform_target_voltage failed, error %s\n",s?(char *)&(construct[1]):"unknown");
+      exit(-1);
+    }
+
+  return (char *)&construct[1];
 }
 
 void platform_delay(uint32_t ms)

@@ -33,8 +33,9 @@
 #endif
 
 #define PLATFORM_HAS_DEBUG
-
+#define PLATFORM_MAX_MSG_SIZE (80)
 #define PLATFORM_IDENT "PC-HOSTED"
+#define BOARD_IDENT PLATFORM_IDENT
 #define SET_RUN_STATE(state)
 #define SET_IDLE_STATE(state)
 #define SET_ERROR_STATE(state)
