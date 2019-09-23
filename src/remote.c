@@ -240,12 +240,20 @@ void remotePacketProcessGEN(uint8_t i, char *packet)
       break;
 
     case REMOTE_PWR_SET:
+#ifdef PLATFORM_HAS_POWER_SWITCH
       platform_target_set_power(packet[2]=='1');
       _respond(REMOTE_RESP_OK,0);
+#else
+      _respond(REMOTE_RESP_NOTSUP,0);
+#endif
       break;
 
     case REMOTE_PWR_GET:
+#ifdef PLATFORM_HAS_POWER_SWITCH
       _respond(REMOTE_RESP_OK,platform_target_get_power());
+#else
+      _respond(REMOTE_RESP_NOTSUP,0);
+#endif
       break;
 
     case REMOTE_START:
