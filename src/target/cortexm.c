@@ -278,6 +278,11 @@ bool cortexm_prepare(ADIv5_AP_t *ap)
 			break;
 		}
 		if (delta > cortexm_wait_timeout) {
+			if (ap->designer == DESIGNER_ATMEL) {
+				/* A protected SAMD never sets S_HALT.
+				 * Continue anyways.*/
+				return true;
+			}
 			DEBUG("Halt failed after %" PRIu32 " ms\n", delta);
 			return false;
 		}

@@ -213,6 +213,7 @@ static const struct {
 	{0xc09, aa_cortexa,   cidc_dc,      PIDR_PN_BIT_STRINGS("Cortex-A9 Debug", "(Debug Unit)")},
 	{0xc0f, aa_nosupport, cidc_unknown, PIDR_PN_BIT_STRINGS("Cortex-A15 Debug", "(Debug Unit)")}, /* support? */
 	{0xc14, aa_nosupport, cidc_unknown, PIDR_PN_BIT_STRINGS("Cortex-R4 Debug", "(Debug Unit)")}, /* support? */
+	{0xcd0, aa_nosupport, cidc_unknown, PIDR_PN_BIT_STRINGS("Atmel DSU", "(Device Service Unit)")},
 	{0xfff, aa_end,       cidc_unknown, PIDR_PN_BIT_STRINGS("end", "end")}
 };
 
@@ -284,7 +285,7 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 		designer |= (pidr & 0xf00000000ULL) >> 24;
 		ap->designer = designer;
 		ap->partno = pidr & 0xfff;
-		DEBUG("Designer 0x%03" PRIx16 ", Partno 0x%03" PRIx16 "\n",
+		DEBUG("Designer 0x%03" PRIx32 ", Partno 0x%03" PRIx16 "\n",
 			  designer, ap->partno);
 		if (designer == DESIGNER_STM) {
 			stm32_prepare(ap);
@@ -542,7 +543,14 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 		 */
 
 		/* The rest should only be added after checking ROM table */
-		adiv5_component_probe(ap, ap->base, 0, 0);
+		if (!adiv5_component_probe(ap, ap->base, 0, 0)) {
+			/* Handle exceptions here. */
+			if (ap->designer == DESIGNER_ATMEL) {
+				/* Protected SAMD does not show any of the ARM
+				 * debug units. Probe anyways to access the DSU */
+				cortexm_probe(ap);
+			}
+		}
 	}
 	if (ctl_ap)
 		cortexm_release(ctl_ap);
