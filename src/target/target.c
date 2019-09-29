@@ -21,6 +21,7 @@
 #include "general.h"
 #include "target.h"
 #include "target_internal.h"
+#include "command.h"
 
 #include <stdarg.h>
 
@@ -140,7 +141,6 @@ void target_add_commands(target *t, const struct command_s *cmds, const char *na
 	tc->next = NULL;
 }
 
-extern bool connect_assert_srst;
 target *target_attach_n(int n, struct target_controller *tc)
 {
 	target *t;

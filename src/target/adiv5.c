@@ -280,17 +280,6 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 		pidr |= (uint64_t)x << 32;
 	}
 
-	if ((ap->apsel == 0) && (recursion == 0) && (num_entry == 0)) {
-		uint32_t designer = (pidr & 0x7f000) >> 12;
-		designer |= (pidr & 0xf00000000ULL) >> 24;
-		ap->designer = designer;
-		ap->partno = pidr & 0xfff;
-		DEBUG("Designer 0x%03" PRIx32 ", Partno 0x%03" PRIx16 "\n",
-			  designer, ap->partno);
-		if (designer == DESIGNER_STM) {
-			stm32_prepare(ap);
-		}
-	}
 	/* Assemble logical Component ID register value. */
 	for (int i = 0; i < 4; i++) {
 		uint32_t x = adiv5_mem_read32(ap, addr + CIDR0_OFFSET + 4*i);
@@ -324,8 +313,8 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 			DEBUG("Fault reading ROM table entry\n");
 		}
 
-		DEBUG("ROM: Table BASE=0x%"PRIx32" SYSMEM=0x%"PRIx32"\n",
-			  addr, memtype);
+		DEBUG("ROM: Table BASE=0x%"PRIx32" SYSMEM=0x%"PRIx32", PIDR 0x%010"
+			  PRIx64 "\n", addr, memtype, pidr);
 #endif
 
 		for (int i = 0; i < 960; i++) {

@@ -242,52 +242,116 @@ static void cortexm_priv_free(void *priv)
 }
 
 /*
- * Prepare Cortex M for reading the ROM table.
+ * Prepare Cortex M for reading the ROM table. If not yet done,
+ * try to read the PIDR to allow device specific settings.
  *
- * Reading the ROM Table often fails when the target is not halted.
+ * Reading the ROM Table often fails when the target is not halted, so
+ * always halt that target
  *
- * Try to halt target as as soon as possible, as probe when reading
- * some none-cortexm-core register often fail anyways and so we must
- * force halt for probing otherwise.
+ * Some debug units only show up with CORTEXM_DEMCR_TRCENA
  *
  * E.g. F7 can not read ROM table under reset, so release reset.
  *
  */
 bool cortexm_prepare(ADIv5_AP_t *ap)
 {
-	DEBUG("cortexm_prepare\n");
-	uint32_t control;
-	adiv5_mem_read(ap, &control, CORTEXM_DEMCR, sizeof(control));
-	if (!(control & CORTEXM_DEMCR_TRCENA)) {
-		DEBUG("CORTEXM_DEMCR_TRCENA not set: Expect unpowered "
-			  "debug units!\n");
-	}
+	DEBUG("cortexm_prepare ");
 	uint32_t start_time = platform_time_ms();
-	platform_srst_set_val(false);
-	while (1) {
-		/* Try hard to halt the target. STM32F7 in WFI
-		   needs multiple writes!*/
-		uint32_t dhcsr = CORTEXM_DHCSR_DBGKEY |
-			CORTEXM_DHCSR_C_HALT | CORTEXM_DHCSR_C_DEBUGEN;
-		adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr, sizeof(dhcsr));
-		uint32_t res;
-		adiv5_mem_read(ap, &res, CORTEXM_DHCSR, sizeof(res));
-		uint32_t delta = platform_time_ms() - start_time;
-		if (res == 0x00030003) {
-			DEBUG("Halted after %" PRIu32 " ms\n", delta);
-			break;
-		}
-		if (delta > cortexm_wait_timeout) {
-			if (ap->designer == DESIGNER_ATMEL) {
-				/* A protected SAMD never sets S_HALT.
-				 * Continue anyways.*/
-				return true;
+	uint32_t initial_demcr;
+	const uint32_t dhcsr_ctl = CORTEXM_DHCSR_DBGKEY | CORTEXM_DHCSR_C_DEBUGEN |
+			CORTEXM_DHCSR_C_HALT;
+	uint32_t dhcsr_status;
+	uint32_t delta;
+	bool res = true;
+	/* Reset sticky bits */
+	adiv5_mem_read(ap, &dhcsr_status, CORTEXM_DHCSR, sizeof(dhcsr_status));
+	adiv5_mem_read(ap, &dhcsr_status, CORTEXM_DHCSR, sizeof(dhcsr_status));
+	if ((dhcsr_status & 0xfff00000) == CORTEXM_DHCSR_S_RESET_ST) {
+		DEBUG("under reset. ");
+		adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr_ctl, sizeof(dhcsr_ctl));
+		adiv5_mem_read(ap, &initial_demcr, CORTEXM_DEMCR, sizeof(uint32_t));
+		uint32_t demcr = initial_demcr | CORTEXM_DEMCR_TRCENA |
+			CORTEXM_DEMCR_VC_HARDERR | CORTEXM_DEMCR_VC_CORERESET;
+		adiv5_mem_write(ap, CORTEXM_DEMCR, &demcr, sizeof(demcr));
+		platform_srst_set_val(false);
+		while (1) {
+			adiv5_mem_read(ap, &dhcsr_status, CORTEXM_DHCSR,
+						   sizeof(dhcsr_status));
+			delta = platform_time_ms() - start_time;
+			if ((dhcsr_status & 0xfff00000) != CORTEXM_DHCSR_S_RESET_ST)
+				break;
+			if (delta > cortexm_wait_timeout) {
+				res = false;
+				break;
 			}
-			DEBUG("Halt failed after %" PRIu32 " ms\n", delta);
-			return false;
+		}
+	} else {
+		platform_srst_set_val(false); /* Just in case */
+		DEBUG("on running target. ");
+		while (1) {
+			adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr_ctl, sizeof(dhcsr_ctl));
+			adiv5_mem_read(ap, &dhcsr_status, CORTEXM_DHCSR,
+						   sizeof(dhcsr_status));
+			delta = platform_time_ms() - start_time;
+			if (dhcsr_status == 0x00030003) {
+				adiv5_mem_read(ap, &initial_demcr, CORTEXM_DEMCR,
+							   sizeof(uint32_t));
+				uint32_t demcr = initial_demcr | CORTEXM_DEMCR_TRCENA ;
+				adiv5_mem_write(ap, CORTEXM_DEMCR, &demcr, sizeof(demcr));
+				break;
+			}
+			if (delta > cortexm_wait_timeout) {
+				res = false;
+				break;
+			}
 		}
 	}
-	return true;
+	bool initial_fixup = false;
+	if (!(ap->apsel) && !(ap->designer)) {
+		/* Try here to read PIDR.*/
+		/* Assemble logical Product ID register value. */
+#define PIDR4_OFFSET  0xfd0 /* DBGPID4 */
+		uint32_t addr = (ap->base & ~3) + PIDR4_OFFSET;
+		uint8_t pidr[8];
+		DEBUG("Pidr-bytes: 0x");
+		for (int  i = 0; i < 8; i++) {
+			adiv5_mem_read(ap, &pidr[i], addr + i * 4, 1);
+			DEBUG("%02" PRIx8 , pidr[i]);
+		}
+		DEBUG(". ");
+		/* some check that PIDR makes sense*/
+		if (!pidr[1] && !pidr[2] && !pidr[3]) {
+			uint32_t designer = (pidr[5] & 0xf0) >> 4;
+			designer |= (pidr[6] & 0x07) << 4;
+			designer |= (pidr[0] & 0xff) << 8;
+			ap->designer = designer;
+			ap->partno = pidr[4] | ((pidr[5] & 0xf) << 8);
+			DEBUG("Designer 0x%03" PRIx32 ", Partno 0x%03" PRIx16 ". ",
+				  designer, ap->partno);
+			initial_fixup = true;
+		}
+	}
+	if (!res) {
+		if (ap->designer == DESIGNER_ATMEL) {
+			/* A protected SAMD never sets S_HALT.
+			 * Continue anyways.*/
+			DEBUG("Exception for Atmel devices\n");
+			return true;
+		}
+		DEBUG("Failed ");
+	} else {
+		ap->demcr = initial_demcr;
+		DEBUG("Ready ");
+	}
+	DEBUG("after %" PRIu32 " ms, DHCSR now 0x%08" PRIx32 "\n",
+		  delta, dhcsr_status);
+	if (initial_fixup) {
+		/* Apply fixup here that should happen only once.*/
+		if (ap->designer == DESIGNER_STM) {
+			stm32_prepare(ap);
+		}
+	}
+	return res;
 }
 
 extern bool adiv5_ap_setup(int i);
@@ -297,6 +361,8 @@ void adiv5_ap_cleanup(int i);
 void cortexm_release(ADIv5_AP_t *ap)
 {
 	DEBUG("cortexm_release\n");
+	/* Write DEMCR before writing DBGMCU_CR!*/
+	adiv5_mem_write(ap, CORTEXM_DEMCR, &ap->demcr, sizeof(ap->demcr));
 	if ((ap->designer == DESIGNER_STM) && ap->priv1) {
 		ADIv5_AP_t *dbgmcu_ap = ap;
 		if (ap->partno == 0x450) {
@@ -329,7 +395,7 @@ void cortexm_release(ADIv5_AP_t *ap)
  */
 void stm32_prepare(ADIv5_AP_t *ap)
 {
-	DEBUG("stm32_prepare\n");
+	DEBUG("stm32_prepare: ");
 	uint32_t dbgmcu_addr = 0xe0042004;
 	uint32_t new_dbgmcu_cr_value = 7;
 	unsigned int identity = ap->idr & 0xff;

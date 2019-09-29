@@ -28,6 +28,7 @@
 #include "target_internal.h"
 #include "adiv5.h"
 #include "stlinkv2.h"
+#include "command.h"
 
 int adiv5_swdp_scan(void)
 {
@@ -35,6 +36,8 @@ int adiv5_swdp_scan(void)
 	ADIv5_DP_t *dp = (void*)calloc(1, sizeof(*dp));
 	if (stlink_enter_debug_swd())
 		return 0;
+	/* stlink_enter_debug_swd releases SRST.*/
+	stlink_srst_set_val(connect_assert_srst);
 	dp->idcode = stlink_read_coreid();
 	dp->dp_read = stlink_dp_read;
 	dp->error = stlink_dp_error;

@@ -183,6 +183,7 @@ typedef struct ADIv5_AP_s {
 	uint32_t csw;
 	uint16_t designer;
 	uint16_t partno;
+	uint32_t demcr; /* DEMCR at entry*/
 	/* Space for device specific values */
 	uint32_t priv1;	/* E.g. Address of DBGMCU_CR for STM32. */
 	uint32_t priv2; /* E.g. Initial value of DBGMCU_CR for STM32. */

@@ -34,6 +34,7 @@ int command_process(target *t, char *cmd);
  * gdb port, returns false and leaves out untouched.
  */
 bool parse_enable_or_disable(const char *s, bool *out);
+extern bool connect_assert_srst;
 
 #endif
 
