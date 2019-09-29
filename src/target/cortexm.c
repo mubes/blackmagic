@@ -285,12 +285,81 @@ bool cortexm_prepare(ADIv5_AP_t *ap)
 	return true;
 }
 
+extern bool adiv5_ap_setup(int i);
+void adiv5_ap_cleanup(int i);
+#define STM32H7_DBGMCU_AP 2
 /* Leave CPU in the state it was before cortexm_prepare()*/
 void cortexm_release(ADIv5_AP_t *ap)
 {
 	DEBUG("cortexm_release\n");
+	if ((ap->designer == DESIGNER_STM) && ap->priv1) {
+		ADIv5_AP_t *dbgmcu_ap = ap;
+		if (ap->partno == 0x450) {
+			if (adiv5_ap_setup(STM32H7_DBGMCU_AP))
+				dbgmcu_ap = adiv5_new_ap(ap->dp, 2);
+			if (dbgmcu_ap == NULL) {
+				adiv5_ap_cleanup(STM32H7_DBGMCU_AP);
+				DEBUG("Setup AP for DBGMCU failed\n");
+			}
+		}
+		DEBUG("Restore DBGMCU at 0x%" PRIx32" to %" PRIx32 "\n",
+			  ap->priv1, ap->priv2);
+		/* Restore DBGMCU.*/
+		adiv5_mem_write(dbgmcu_ap, ap->priv1, &ap->priv2, sizeof(ap->priv2));
+		if (dbgmcu_ap != ap)
+			adiv5_ap_cleanup(STM32H7_DBGMCU_AP);
+	}
 	uint32_t dhcsr = CORTEXM_DHCSR_DBGKEY;
 	adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr, sizeof(dhcsr));
+}
+
+/* For STM32, enable DEBUG in the sleep modes.
+ * E.g. for M7 devices sleeping, reading rom tables will fail.
+ *
+ * Expect reading DWT/ITM/ETM and TPIU to fail as long as
+ * DEMCR TRCENA is not set!
+ */
+void stm32_prepare(ADIv5_AP_t *ap)
+{
+	DEBUG("stm32_prepare\n");
+	uint32_t dbgmcu_addr = 0xe0042004;
+	uint32_t new_dbgmcu_cr_value = 7;
+	unsigned int identity = ap->idr & 0xff;
+	switch (identity) {
+	case 0x11: /* M3/M4 */
+		dbgmcu_addr = 0xe0042004;
+		break;
+	case 0x15: /* M33 */
+		dbgmcu_addr = 0xe0044004;
+		new_dbgmcu_cr_value = 0x6;
+		break;
+	case 0x21: /* M0 */
+	case 0x31: /* M0+ */
+		dbgmcu_addr = 0x40015804;
+		break;
+	case 0x01: /* M7 */
+		if (ap->partno == 0x450) {
+			/* On startup use AP0 and 0x5c001004.
+			 * To restore initial value, use AP2 at 0xe00e1004. */
+			dbgmcu_addr= 0x5c001004;
+			new_dbgmcu_cr_value = 0x0060017f;
+		}
+		break;
+	default:
+		return; /* No Cortex M*/
+	}
+	/* Save old value */
+	adiv5_mem_read(ap, &ap->priv2, dbgmcu_addr, sizeof(ap->priv2));
+	adiv5_mem_write(ap, dbgmcu_addr, &new_dbgmcu_cr_value,
+						sizeof(&new_dbgmcu_cr_value));
+	uint32_t res;
+	adiv5_mem_read(ap, &res, dbgmcu_addr, sizeof(res));
+	DEBUG("DBGMCU_CR initial %" PRIx32 " now 0x%" PRIx32 "\n",
+		  ap->priv2, res);
+	if (ap->partno == 0x450)
+		ap->priv1 = 0xe00e1004;
+	else
+		ap->priv1 = dbgmcu_addr;
 }
 
 static bool cortexm_forced_halt(target *t)

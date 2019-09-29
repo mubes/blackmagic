@@ -279,6 +279,17 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 		pidr |= (uint64_t)x << 32;
 	}
 
+	if ((ap->apsel == 0) && (recursion == 0) && (num_entry == 0)) {
+		uint32_t designer = (pidr & 0x7f000) >> 12;
+		designer |= (pidr & 0xf00000000ULL) >> 24;
+		ap->designer = designer;
+		ap->partno = pidr & 0xfff;
+		DEBUG("Designer 0x%03" PRIx16 ", Partno 0x%03" PRIx16 "\n",
+			  designer, ap->partno);
+		if (designer == DESIGNER_STM) {
+			stm32_prepare(ap);
+		}
+	}
 	/* Assemble logical Component ID register value. */
 	for (int i = 0; i < 4; i++) {
 		uint32_t x = adiv5_mem_read32(ap, addr + CIDR0_OFFSET + 4*i);
@@ -505,20 +516,20 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 			return;
 		}
 		last_base = ap->base;
-                if (i == 0) {
-                    unsigned int identity = ap->idr & 0xff;
-                    switch (identity) {
-                    case 0x11: /* M3/M4 */
-                    case 0x15: /* M33 */
-                    case 0x21: /* M0 */
-                    case 0x25: /* M23 */
-                    case 0x31: /* M0+ */
-                    case 0x01: /* M7 */
-                        if (!cortexm_prepare(ap))
-                            return;
-                        ctl_ap = ap;
-                    }
-                }
+		if (i == 0) {
+			unsigned int identity = ap->idr & 0xff;
+			switch (identity) {
+			case 0x11: /* M3/M4 */
+			case 0x15: /* M33 */
+			case 0x21: /* M0 */
+			case 0x25: /* M23 */
+			case 0x31: /* M0+ */
+			case 0x01: /* M7 */
+				if (!cortexm_prepare(ap))
+					return;
+				ctl_ap = ap;
+			}
+		}
 		extern void kinetis_mdm_probe(ADIv5_AP_t *);
 		kinetis_mdm_probe(ap);
 

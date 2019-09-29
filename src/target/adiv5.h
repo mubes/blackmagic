@@ -129,6 +129,10 @@ enum align {
 	ALIGN_DWORD    = 3
 };
 
+/* Some Designers already seen*/
+#define DESIGNER_STM   0x020
+#define DESIGNER_ATMEL 0x01f
+
 /* Try to keep this somewhat absract for later adding SW-DP */
 typedef struct ADIv5_DP_s {
 	int refcnt;
@@ -180,6 +184,11 @@ typedef struct ADIv5_AP_s {
 	uint32_t cfg;
 	uint32_t base;
 	uint32_t csw;
+	uint16_t designer;
+	uint16_t partno;
+	/* Space for device specific values */
+	uint32_t priv1;	/* E.g. Address of DBGMCU_CR for STM32. */
+	uint32_t priv2; /* E.g. Initial value of DBGMCU_CR for STM32. */
 } ADIv5_AP_t;
 
 void adiv5_dp_init(ADIv5_DP_t *dp);
