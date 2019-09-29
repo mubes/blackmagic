@@ -5,8 +5,7 @@
  * Written by Gareth McMullin <gareth@blacksphere.co.nz>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under tSchreibe Objekte: 100% (21/21), 3.20 KiB | 3.20 MiB/s, Fertig.
-he terms of the GNU General Public License as published by
+ * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
@@ -242,6 +241,58 @@ static void cortexm_priv_free(void *priv)
 	free(priv);
 }
 
+/*
+ * Prepare Cortex M for reading the ROM table.
+ *
+ * Reading the ROM Table often fails when the target is not halted.
+ *
+ * Try to halt target as as soon as possible, as probe when reading
+ * some none-cortexm-core register often fail anyways and so we must
+ * force halt for probing otherwise.
+ *
+ * E.g. F7 can not read ROM table under reset, so release reset.
+ *
+ */
+bool cortexm_prepare(ADIv5_AP_t *ap)
+{
+	DEBUG("cortexm_prepare\n");
+	uint32_t control;
+	adiv5_mem_read(ap, &control, CORTEXM_DEMCR, sizeof(control));
+	if (!(control & CORTEXM_DEMCR_TRCENA)) {
+		DEBUG("CORTEXM_DEMCR_TRCENA not set: Expect unpowered "
+			  "debug units!\n");
+	}
+	uint32_t start_time = platform_time_ms();
+	platform_srst_set_val(false);
+	while (1) {
+		/* Try hard to halt the target. STM32F7 in WFI
+		   needs multiple writes!*/
+		uint32_t dhcsr = CORTEXM_DHCSR_DBGKEY |
+			CORTEXM_DHCSR_C_HALT | CORTEXM_DHCSR_C_DEBUGEN;
+		adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr, sizeof(dhcsr));
+		uint32_t res;
+		adiv5_mem_read(ap, &res, CORTEXM_DHCSR, sizeof(res));
+		uint32_t delta = platform_time_ms() - start_time;
+		if (res == 0x00030003) {
+			DEBUG("Halted after %" PRIu32 " ms\n", delta);
+			break;
+		}
+		if (delta > cortexm_wait_timeout) {
+			DEBUG("Halt failed after %" PRIu32 " ms\n", delta);
+			return false;
+		}
+	}
+	return true;
+}
+
+/* Leave CPU in the state it was before cortexm_prepare()*/
+void cortexm_release(ADIv5_AP_t *ap)
+{
+	DEBUG("cortexm_release\n");
+	uint32_t dhcsr = CORTEXM_DHCSR_DBGKEY;
+	adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr, sizeof(dhcsr));
+}
+
 static bool cortexm_forced_halt(target *t)
 {
 	target_halt_request(t);
@@ -292,8 +343,14 @@ bool cortexm_probe(ADIv5_AP_t *ap, bool forced)
 	case 0x11: /* M3/M4 */
 		t->core = "M3/M4";
 		break;
+	case 0x15: /* M33 */
+		t->core = "M33";
+		break;
 	case 0x21: /* M0 */
 		t->core = "M0";
+		break;
+	case 0x25: /* M23 */
+		t->core = "M23";
 		break;
 	case 0x31: /* M0+ */
 		t->core = "M0+";
