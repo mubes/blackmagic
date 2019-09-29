@@ -88,9 +88,6 @@ static int stm32f1_flash_write(struct target_flash *f,
 #define SR_ERROR_MASK	0x14
 #define SR_EOP		0x20
 
-#define DBGMCU_IDCODE	0xE0042000
-#define DBGMCU_IDCODE_F0	0x40015800
-
 #define FLASHSIZE     0x1FFFF7E0
 #define FLASHSIZE_F0  0x1FFFF7CC
 
@@ -115,9 +112,9 @@ static void stm32f1_add_flash(target *t,
 
 bool stm32f1_probe(target *t)
 {
-	size_t flash_size;
+	size_t flash_size = 0;
 	size_t block_size = 0x400;
-	t->idcode = target_mem_read32(t, DBGMCU_IDCODE) & 0xfff;
+	t->idcode = cortexm_ap(t)->partno;
 	switch(t->idcode) {
 	case 0x410:  /* Medium density */
 	case 0x412:  /* Low denisty */
@@ -146,11 +143,7 @@ bool stm32f1_probe(target *t)
 		target_add_ram(t, 0x20000000, 0x10000);
 		stm32f1_add_flash(t, 0x8000000, 0x80000, 0x800);
 		target_add_commands(t, stm32f1_cmd_list, "STM32F3");
-		return true;
-	}
-
-	t->idcode = target_mem_read32(t, DBGMCU_IDCODE_F0) & 0xfff;
-	switch(t->idcode) {
+		break;
 	case 0x444:  /* STM32F03 RM0091 Rev.7, STM32F030x[4|6] RM0360 Rev. 4*/
 		t->driver = "STM32F03";
 		flash_size = 0x8000;

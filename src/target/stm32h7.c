@@ -190,9 +190,6 @@ static bool stm32h7_attach(target *t)
 		return false;
 	/* RM0433 Rev 4 is not really clear, what bits are needed.
 	 * Set all possible relevant bits for now. */
-	uint32_t dbgmcu_cr = target_mem_read32(t, DBGMCU_CR);
-	t->target_storage = dbgmcu_cr;
-	target_mem_write32(t, DBGMCU_CR, DBGSLEEP_D1 | D1DBGCKEN);
 	/* If IWDG runs as HARDWARE watchdog (44.3.4) erase
 	 * will be aborted by the Watchdog and erase fails!
 	 * Setting IWDG_KR to 0xaaaa does not seem to help!*/
@@ -224,12 +221,6 @@ static bool stm32h7_attach(target *t)
 	return true;
 }
 
-static void stm32h7_detach(target *t)
-{
-	target_mem_write32(t, DBGMCU_CR, t->target_storage);
-	cortexm_detach(t);
-}
-
 bool stm32h7_probe(target *t)
 {
 	ADIv5_AP_t *ap = cortexm_ap(t);
@@ -238,7 +229,6 @@ bool stm32h7_probe(target *t)
 		t->idcode = idcode;
 		t->driver = stm32h74_driver_str;
 		t->attach = stm32h7_attach;
-		t->detach = stm32h7_detach;
 		target_add_commands(t, stm32h7_cmd_list, stm32h74_driver_str);
 		return true;
 	}

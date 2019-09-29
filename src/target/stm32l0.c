@@ -169,11 +169,6 @@ static const struct command_s stm32lx_cmd_list[] = {
         { NULL, NULL, NULL },
 };
 
-enum {
-        STM32L0_DBGMCU_IDCODE_PHYS = 0x40015800,
-        STM32L1_DBGMCU_IDCODE_PHYS = 0xe0042000,
-};
-
 static bool stm32lx_is_stm32l1(target* t)
 {
         switch (t->idcode) {
@@ -270,7 +265,7 @@ bool stm32l0_probe(target* t)
 {
 	uint32_t idcode;
 
-	idcode = target_mem_read32(t, STM32L1_DBGMCU_IDCODE_PHYS) & 0xfff;
+	idcode = cortexm_ap(t)->partno;
 	switch (idcode) {
 	case 0x416:                   /* CAT. 1 device */
 	case 0x429:                   /* CAT. 2 device */
@@ -284,10 +279,6 @@ bool stm32l0_probe(target* t)
 		//stm32l_add_eeprom(t, 0x8080000, 0x4000);
 		target_add_commands(t, stm32lx_cmd_list, "STM32L1x");
 		return true;
-	}
-
-	idcode = target_mem_read32(t, STM32L0_DBGMCU_IDCODE_PHYS) & 0xfff;
-	switch (idcode) {
 	case 0x457:                   /* STM32L0xx Cat1 */
 	case 0x425:                   /* STM32L0xx Cat2 */
 	case 0x417:                   /* STM32L0xx Cat3 */

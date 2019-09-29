@@ -110,15 +110,6 @@ static int stm32l4_flash_write(struct target_flash *f,
 /* Used in STM32L47R and STM32G47 */
 #define OR_DBANK 		(1 << 22)
 
-#define DBGMCU_CR(dbgmcureg)	(dbgmcureg + 0x04)
-#define DBGMCU_CR_DBG_SLEEP		(0x1U << 0U)
-#define DBGMCU_CR_DBG_STOP		(0x1U << 1U)
-#define DBGMCU_CR_DBG_STANDBY	(0x1U << 2U)
-
-enum {
-        STM32G0_DBGMCU_IDCODE_PHYS = 0x40015800,
-        STM32L4_DBGMCU_IDCODE_PHYS = 0xe0042000,
-};
 #define FLASH_SIZE_REG  0x1FFF75E0
 
 struct stm32l4_flash {
@@ -287,19 +278,6 @@ static bool stm32l4_attach(target *t)
 	struct stm32l4_info const *chip = stm32l4_get_chip_info(t->idcode);
 
 
-	uint32_t idcodereg = (chip->family == FAM_STM32G0x)
-				     ? STM32G0_DBGMCU_IDCODE_PHYS
-				     : STM32L4_DBGMCU_IDCODE_PHYS;
-
-
-	/* Save DBGMCU_CR to restore it when detaching*/
-	uint32_t dbgmcu_cr = target_mem_read32(t, DBGMCU_CR(idcodereg));
-	t->target_storage = dbgmcu_cr;
-
-	/* Enable debugging during all low power modes*/
-	target_mem_write32(t, DBGMCU_CR(idcodereg), DBGMCU_CR_DBG_SLEEP | DBGMCU_CR_DBG_STANDBY | DBGMCU_CR_DBG_STOP);
-
-
 	/* Free previously loaded memory map */
 	target_mem_map_free(t);
 
@@ -352,23 +330,9 @@ static bool stm32l4_attach(target *t)
 	return true;
 }
 
-static void stm32l4_detach(target *t)
-{
-	/*reverse all changes to DBGMCU_CR*/
-	uint32_t idcodereg = STM32L4_DBGMCU_IDCODE_PHYS;
-	if (t->idcode == ID_STM32G07)
-		idcodereg = STM32G0_DBGMCU_IDCODE_PHYS;
-	target_mem_write32(t, DBGMCU_CR(idcodereg), t->target_storage);
-	cortexm_detach(t);
-}
-
 bool stm32l4_probe(target *t)
 {
-	uint32_t idcode_reg = STM32L4_DBGMCU_IDCODE_PHYS;
-	ADIv5_AP_t *ap = cortexm_ap(t);
-	if (ap->dp->idcode == 0x0BC11477)
-		idcode_reg = STM32G0_DBGMCU_IDCODE_PHYS;
-	uint32_t idcode = target_mem_read32(t, idcode_reg) & 0xfff;
+	uint32_t idcode = cortexm_ap(t)->partno;
 
 	struct stm32l4_info const *chip = stm32l4_get_chip_info(idcode);
 
@@ -378,7 +342,6 @@ bool stm32l4_probe(target *t)
 	t->idcode = idcode;
 	t->driver = chip->designator;
 	t->attach = stm32l4_attach;
-	t->detach = stm32l4_detach;
 	target_add_commands(t, stm32l4_cmd_list, chip->designator);
 	return true;
 }
