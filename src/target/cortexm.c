@@ -311,6 +311,9 @@ void cortexm_release(ADIv5_AP_t *ap)
 	}
 	uint32_t dhcsr = CORTEXM_DHCSR_DBGKEY;
 	adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr, sizeof(dhcsr));
+	/* Add some clock cycles to get the CPU running again.*/
+	uint32_t dummy = 0;
+	adiv5_mem_write(ap, 0, &dummy, sizeof(dummy));
 }
 
 /* For STM32, enable DEBUG in the sleep modes.
@@ -362,27 +365,7 @@ void stm32_prepare(ADIv5_AP_t *ap)
 		ap->priv1 = dbgmcu_addr;
 }
 
-static bool cortexm_forced_halt(target *t)
-{
-	target_halt_request(t);
-	platform_srst_set_val(false);
-	uint32_t dhcsr = 0;
-	uint32_t start_time = platform_time_ms();
-	/* Try hard to halt the target. STM32F7 in  WFI
-	   needs multiple writes!*/
-	while (platform_time_ms() < start_time + cortexm_wait_timeout) {
-		dhcsr = target_mem_read32(t, CORTEXM_DHCSR);
-		if (dhcsr == (CORTEXM_DHCSR_S_HALT | CORTEXM_DHCSR_S_REGRDY |
-					  CORTEXM_DHCSR_C_HALT | CORTEXM_DHCSR_C_DEBUGEN))
-			break;
-		target_halt_request(t);
-	}
-	if (dhcsr != 0x00030003)
-		return false;
-	return true;
-}
-
-bool cortexm_probe(ADIv5_AP_t *ap, bool forced)
+bool cortexm_probe(ADIv5_AP_t *ap)
 {
 	target *t;
 
@@ -473,14 +456,6 @@ bool cortexm_probe(ADIv5_AP_t *ap, bool forced)
 		target_check_error(t);
 	}
 
-	/* Only force halt if read ROM Table failed and there is no DPv2
-	 * targetid!
-	 * So long, only STM32L0 is expected to enter this cause.
-	 */
-	if (forced && !ap->dp->targetid)
-		if (!cortexm_forced_halt(t))
-			return false;
-
 #define PROBE(x) \
 	do { if ((x)(t)) {target_halt_resume(t, 0); return true;} else target_check_error(t); } while (0)
 
@@ -516,8 +491,7 @@ bool cortexm_attach(target *t)
 	/* Clear any pending fault condition */
 	target_check_error(t);
 
-	target_halt_request(t);
-	if (!cortexm_forced_halt(t))
+	if (!cortexm_prepare(cortexm_ap(t)))
 		return false;
 
 	/* Request halt on reset */
@@ -569,10 +543,7 @@ void cortexm_detach(target *t)
 	for(i = 0; i < priv->hw_watchpoint_max; i++)
 		target_mem_write32(t, CORTEXM_DWT_FUNC(i), 0);
 
-	/* Disable debug */
-	target_mem_write32(t, CORTEXM_DHCSR, CORTEXM_DHCSR_DBGKEY);
-	/* Add some clock cycles to get the CPU running again.*/
-	target_mem_read32(t, 0);
+	cortexm_release(cortexm_ap(t));
 }
 
 enum { DB_DHCSR, DB_DCRSR, DB_DCRDR, DB_DEMCR };

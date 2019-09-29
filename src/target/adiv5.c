@@ -381,7 +381,7 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 				switch (pidr_pn_bits[i].arch) {
 				case aa_cortexm:
 					DEBUG("%s-> cortexm_probe\n", indent + 1);
-					cortexm_probe(ap, false);
+					cortexm_probe(ap);
 					break;
 				case aa_cortexa:
 					DEBUG("%s-> cortexa_probe\n", indent + 1);
@@ -443,7 +443,6 @@ ADIv5_AP_t *adiv5_new_ap(ADIv5_DP_t *dp, uint8_t apsel)
 
 void adiv5_dp_init(ADIv5_DP_t *dp)
 {
-	volatile bool probed = false;
 	volatile uint32_t ctrlstat = 0;
 	adiv5_dp_ref(dp);
 
@@ -487,14 +486,6 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 				ADIV5_DP_CTRLSTAT_CDBGRSTACK);
 	}
 
-	dp->dp_idcode =  adiv5_dp_read(dp, ADIV5_DP_IDCODE);
-	if ((dp->dp_idcode & ADIV5_DP_VERSION_MASK) == ADIV5_DPv2) {
-		/* Read TargetID. Can be done with device in WFI, sleep or reset!*/
-		adiv5_dp_write(dp, ADIV5_DP_SELECT, ADIV5_DP_BANK2);
-		dp->targetid = adiv5_dp_read(dp, ADIV5_DP_CTRLSTAT);
-		adiv5_dp_write(dp, ADIV5_DP_SELECT, ADIV5_DP_BANK0);
-		DEBUG("TARGETID %08" PRIx32 "\n", dp->targetid);
-	}
 	/* Probe for APs on this DP */
 	uint32_t last_base = 0;
 	ADIv5_AP_t *ctl_ap = NULL;
@@ -551,12 +542,7 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 		 */
 
 		/* The rest should only be added after checking ROM table */
-		probed |= adiv5_component_probe(ap, ap->base, 0, 0);
-		if (!probed && (dp->idcode & 0xfff) == 0x477) {
-			DEBUG("-> cortexm_probe forced\n");
-			cortexm_probe(ap, true);
-			probed = true;
-		}
+		adiv5_component_probe(ap, ap->base, 0, 0);
 	}
 	if (ctl_ap)
 		cortexm_release(ctl_ap);

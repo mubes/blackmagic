@@ -233,7 +233,7 @@ static void stm32h7_detach(target *t)
 bool stm32h7_probe(target *t)
 {
 	ADIv5_AP_t *ap = cortexm_ap(t);
-	uint32_t idcode = (ap->dp->targetid >> 16) & 0xfff;
+	uint32_t idcode = ap->partno;
 	if (idcode == ID_STM32H74x) {
 		t->idcode = idcode;
 		t->driver = stm32h74_driver_str;
