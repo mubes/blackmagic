@@ -343,19 +343,14 @@ static int kl_gen_flash_done(struct target_flash *f)
 #define KINETIS_MDM_IDR_K22F 0x1c0000
 #define KINETIS_MDM_IDR_KZ03 0x1c0020
 
-static bool kinetis_mdm_cmd_erase_mass(target *t);
-static bool kinetis_mdm_cmd_ke04_mode(target *t);
+static bool kinetis_mdm_cmd_erase_mass(target *t, int argc, const char **argv);
+static bool kinetis_mdm_cmd_ke04_mode(target *t, int argc, const char **argv);
 
 const struct command_s kinetis_mdm_cmd_list[] = {
 	{"erase_mass", (cmd_handler)kinetis_mdm_cmd_erase_mass, "Erase entire flash memory"},
 	{"ke04_mode", (cmd_handler)kinetis_mdm_cmd_ke04_mode, "Allow erase for KE04"},
 	{NULL, NULL, NULL}
 };
-
-static bool nop_function(void)
-{
-	return true;
-}
 
 enum target_halt_reason mdm_halt_poll(target *t, target_addr *watch)
 {
@@ -383,19 +378,7 @@ void kinetis_mdm_probe(ADIv5_AP_t *ap)
 	t->priv_free = (void*)adiv5_ap_unref;
 
 	t->driver = "Kinetis Recovery (MDM-AP)";
-	t->attach = (void*)nop_function;
-	t->detach = (void*)nop_function;
-	t->check_error = (void*)nop_function;
-	t->mem_read = (void*)nop_function;
-	t->mem_write = (void*)nop_function;
 	t->regs_size = 4;
-	t->regs_read = (void*)nop_function;
-	t->regs_write = (void*)nop_function;
-	t->reset = (void*)nop_function;
-	t->halt_request = (void*)nop_function;
-	t->halt_poll = mdm_halt_poll;
-	t->halt_resume = (void*)nop_function;
-
 	target_add_commands(t, kinetis_mdm_cmd_list, t->driver);
 }
 
@@ -412,15 +395,19 @@ void kinetis_mdm_probe(ADIv5_AP_t *ap)
 /* This is needed as a separate command, as there's no way to  *
  * tell a KE04 from other kinetis in kinetis_mdm_probe()       */
 static bool ke04_mode = false;
-static bool kinetis_mdm_cmd_ke04_mode(target *t)
+static bool kinetis_mdm_cmd_ke04_mode(target *t, int argc, const char **argv)
 {
+	(void)argc;
+	(void)argv;
 	/* Set a flag to ignore part of the status and assert reset */
 	ke04_mode = true;
 	tc_printf(t, "Mass erase for KE04 now allowed\n");
 	return true;
 }
-static bool kinetis_mdm_cmd_erase_mass(target *t)
+static bool kinetis_mdm_cmd_erase_mass(target *t, int argc, const char **argv)
 {
+	(void)argc;
+	(void)argv;
 	ADIv5_AP_t *ap = t->priv;
 
 	/* Keep the MCU in reset as stated in KL25PxxM48SF0RM */

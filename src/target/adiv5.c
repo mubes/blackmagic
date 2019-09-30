@@ -258,7 +258,7 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 	uint64_t pidr = 0;
 	uint32_t cidr = 0;
 	bool res = false;
-#if defined(ENABLE_DEBUG)
+#if defined(ENABLE_DEBUG) && defined(PLATFORM_HAS_DEBUG)
 	char indent[recursion];
 
 	for(int i = 0; i < recursion; i++) indent[i] = ' ';
@@ -300,7 +300,7 @@ static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, 
 	/* ROM table */
 	if (cid_class == cidc_romtab) {
 		/* Check SYSMEM bit */
-#ifdef ENABLE_DEBUG
+#if defined(ENABLE_DEBUG) && defined(PLATFORM_HAS_DEBUG)
 		uint32_t memtype = adiv5_mem_read32(ap, addr | ADIV5_ROM_MEMTYPE) &
 			ADIV5_ROM_MEMTYPE_SYSMEM;
 
@@ -489,6 +489,7 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 	}
 
 	/* Probe for APs on this DP */
+	uint32_t last_base = 0;
 	for(int i = 0; i < 256; i++) {
 		ADIv5_AP_t *ap = NULL;
 		if (adiv5_ap_setup(i))
@@ -500,6 +501,13 @@ void adiv5_dp_init(ADIv5_DP_t *dp)
 			else
 				continue;
 		}
+		if (ap->base == last_base) {
+			DEBUG("AP %d: Duplicate base\n", i);
+			adiv5_ap_cleanup(i);
+			/* FIXME: Should we expect valid APs behind duplicate ones? */
+			return;
+		}
+		last_base = ap->base;
 		extern void kinetis_mdm_probe(ADIv5_AP_t *);
 		kinetis_mdm_probe(ap);
 
