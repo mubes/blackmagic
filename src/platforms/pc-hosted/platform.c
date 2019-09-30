@@ -322,7 +322,7 @@ int vasprintf(char **strp, const char *fmt, va_list ap)
 const char *platform_target_voltage(void)
 
 {
-  static uint8_t construct[80];
+  static uint8_t construct[PLATFORM_MAX_MSG_SIZE];
   int s;
 
   s=snprintf((char *)construct,PLATFORM_MAX_MSG_SIZE,"%s",REMOTE_VOLTAGE_STR);

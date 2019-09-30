@@ -78,7 +78,6 @@
 #define REMOTE_SRST_GET     'z'
 
 /* Protocol response options */
-#define REMOTE_RESP_FORMAT "%c%" PRIx64
 #define REMOTE_RESP_OK     'K'
 #define REMOTE_RESP_PARERR 'P'
 #define REMOTE_RESP_ERR    'E'

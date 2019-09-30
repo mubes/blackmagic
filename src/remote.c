@@ -28,7 +28,7 @@
 #include <stdarg.h>
 
 
-#define NTOH(x) ((x<='9')?x+'0':'a'+x-10)
+#define NTOH(x) ((x<=9)?x+'0':'a'+x-10)
 #define HTON(x) ((x<='9')?x-'0':((TOUPPER(x))-'A'+10))
 #define TOUPPER(x) ((((x)>='a') && ((x)<='z'))?((x)-('a'-'A')):(x))
 #define ISHEX(x) (						\
@@ -62,14 +62,24 @@ static void _respond(char respCode, uint64_t param)
 /* Send response to far end */
 
 {
-  char buf[40];
+  char buf[34];
   char *p=buf;
-  int size;
 
   gdb_if_putchar(REMOTE_RESP,0);
-  size=sprintf(buf,REMOTE_RESP_FORMAT,respCode,param);
-  while (size--)
-    gdb_if_putchar(*p++, 0);
+  gdb_if_putchar(respCode,0);
+
+  do
+    {
+      *p++=NTOH((param&0x0f));
+      param>>=4;
+    }
+  while (param);
+
+  /* At this point the number to print is the buf, but backwards, so spool it out */
+  do
+    {
+      gdb_if_putchar(*--p,0);
+    } while (p>buf);
   gdb_if_putchar(REMOTE_EOM,1);  
 }
 
