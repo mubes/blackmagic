@@ -36,6 +36,13 @@
  * are consistently named and accessible when needed in the codebase.
  */
 
+/* Values from ST RM0436 (STM32MP157), 66.9 APx_IDR
+ * and ST RM0439 (STM32L5) 51.3.2, AP_IDR */
+#define ARM_AP_TYPE_AHB  1
+#define ARM_AP_TYPE_APB  3
+#define ARM_AP_TYPE_AXI  4
+#define ARM_AP_TYPE_AHB5 5
+
 /* ROM table CIDR values */
 #define CIDR0_OFFSET    0xFF0 /* DBGCID0 */
 #define CIDR1_OFFSET    0xFF4 /* DBGCID1 */
@@ -267,6 +274,68 @@ uint64_t adiv5_ap_read_pidr(ADIv5_AP_t *ap, uint32_t addr)
 	return pidr;
 }
 
+/* DHCSR, Romtables and SYSROM can be read out under reset. No need
+ * to release reset here. However on a sleeping device, reading may fail.
+ * Try to halt the device.
+ *
+ * For STM32F7 we can and must enable debug during sleep, if device uses WFI.
+ */
+static bool cortexm_prepare(ADIv5_AP_t *ap)
+{
+	uint32_t dhcsr_status;
+	platform_timeout to ;
+	platform_timeout_set(&to, cortexm_wait_timeout);
+#ifdef PLATFORM_HAS_DEBUG
+	uint32_t start_time = platform_time_ms();
+#endif
+	DEBUG_INFO("DHCSR start %08" PRIx32, adiv5_mem_read32(ap, CORTEXM_DHCSR));
+	uint32_t dhcsr_ctl = CORTEXM_DHCSR_DBGKEY |	CORTEXM_DHCSR_C_DEBUGEN |
+		CORTEXM_DHCSR_C_HALT;
+	uint32_t target_halted = CORTEXM_DHCSR_S_HALT |
+		CORTEXM_DHCSR_C_HALT | CORTEXM_DHCSR_C_DEBUGEN;
+	uint32_t target_reset = CORTEXM_DHCSR_S_RESET_ST | CORTEXM_DHCSR_C_DEBUGEN;
+	while (true) {
+		adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr_ctl, sizeof(dhcsr_ctl));
+		dhcsr_status  = adiv5_mem_read32(ap, CORTEXM_DHCSR);
+		dhcsr_status &= ~(CORTEXM_DHCSR_S_RETIRE_ST | CORTEXM_DHCSR_S_REGRDY);
+		if ((dhcsr_status == target_halted) || (dhcsr_status == target_reset)) {
+			DEBUG_INFO(", success %08" PRIx32 " after %" PRId32 "ms\n",
+				  dhcsr_status, platform_time_ms() - start_time);
+			break;
+		}
+		if (platform_timeout_is_expired(&to)) {
+			DEBUG_WARN(", can not halt CPU. DHCSR %08" PRIx32 "\n",
+				  adiv5_mem_read32(ap, CORTEXM_DHCSR));
+			return false;
+		}
+	}
+	if ((ap->dp->targetid >> 1 & 0x7ff) == 0x20) {
+		/* This is very device specific and should go to the device file!*/
+		uint32_t dbgmcu_cr = 0;
+		uint32_t dbgmcu_cr_addr = 0xE0042004;
+		dbgmcu_cr |= 7;
+		switch ((ap->dp->targetid >> 16) & 0xfff) {
+		case 0x449:
+		case 0x451:
+		case 0x452:
+			dbgmcu_cr = 7;
+			break;
+		case 0x450:
+			dbgmcu_cr_addr = 0x5c001004;
+			dbgmcu_cr = 0x0060017f;
+		}
+		if (dbgmcu_cr) {
+			DEBUG_INFO("DBGMCU_CR start %08" PRIx32,
+				  adiv5_mem_read32(ap, dbgmcu_cr_addr));
+			adiv5_mem_write(ap, dbgmcu_cr_addr, &dbgmcu_cr, sizeof(dbgmcu_cr));
+			DEBUG_INFO(",  %08" PRIx32 " after %" PRId32 " ms\n",
+				  adiv5_mem_read32(ap, dbgmcu_cr_addr),
+				  platform_time_ms() - start_time);
+		}
+	}
+	return true;
+}
+
 static bool adiv5_component_probe(ADIv5_AP_t *ap, uint32_t addr, int recursion, int num_entry)
 {
 	(void) num_entry;
@@ -429,11 +498,11 @@ ADIv5_AP_t *adiv5_new_ap(ADIv5_DP_t *dp, uint8_t apsel)
 		ap->csw &= ~ADIV5_AP_CSW_TRINPROG;
 	}
 
-#if defined(ENABLE_DEBUG)
-	uint32_t cfg = adiv5_ap_read(ap, ADIV5_AP_CFG);
-	DEBUG_INFO("AP %3d: IDR=%08"PRIx32" CFG=%08"PRIx32" BASE=%08" PRIx32
-			   " CSW=%08"PRIx32"\n", apsel, ap->idr, cfg, ap->base, ap->csw);
-#endif
+	DEBUG_INFO("AP %3d: IDR=%08" PRIx32 " CFG=%08" PRIx32 " BASE=%08" PRIx32 " CSW=%08" PRIx32 "\n",
+	      apsel, ap->idr, adiv5_ap_read(ap, ADIV5_AP_CFG), ap->base, ap->csw);
+	if (!apsel && ((ap->idr & 0xf) == ARM_AP_TYPE_AHB) && !cortexm_prepare(ap))
+		return NULL;
+
 	return ap;
 }
 
