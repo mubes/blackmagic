@@ -556,15 +556,16 @@ ADIv5_AP_t *adiv5_new_ap(ADIv5_DP_t *dp, uint8_t apsel)
 				return NULL;
 			}
 			dp->dp_release_ap = ap;
+			/* Enable Trace to see all debug units*/
+			uint32_t demcr =
+				CORTEXM_DEMCR_TRCENA | CORTEXM_DEMCR_VC_HARDERR |
+				CORTEXM_DEMCR_VC_CORERESET;
+			adiv5_mem_write(ap, CORTEXM_DEMCR, &demcr, sizeof(demcr));
 			if (connect_assert_srst) {
 			/* E.g. STM32L0 does not allow reading the romtable under reset.
 			 * Test if reading CIDR succeds. With fail, request halt on reset
 			 * deassert reset and wait until CPU no longer sees the reset.
 			 */
-				uint32_t demcr =
-					CORTEXM_DEMCR_TRCENA | CORTEXM_DEMCR_VC_HARDERR |
-					CORTEXM_DEMCR_VC_CORERESET;
-				adiv5_mem_write(ap, CORTEXM_DEMCR, &demcr, sizeof(demcr));
 				platform_srst_set_val(false);
 				platform_timeout to;
 				platform_timeout_set(&to, 1000);
