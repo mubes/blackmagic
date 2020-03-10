@@ -327,7 +327,9 @@ static bool cortexm_prepare(ADIv5_AP_t *ap)
 	while (true) {
 		adiv5_mem_write(ap, CORTEXM_DHCSR, &dhcsr_ctl, sizeof(dhcsr_ctl));
 		dhcsr_status  = adiv5_mem_read32(ap, CORTEXM_DHCSR);
-		dhcsr_status &= ~(CORTEXM_DHCSR_S_RETIRE_ST | CORTEXM_DHCSR_S_REGRDY);
+		/* ArmV8 sets S_SDE when invasive debug is allowed.*/
+		dhcsr_status &= ~(CORTEXM_DHCSR_S_RETIRE_ST | CORTEXM_DHCSR_S_REGRDY |
+						  CORTEXM_DHCSR_S_SDE);
 		if ((dhcsr_status == target_halted) || ((dhcsr_status & ~(CORTEXM_DHCSR_C_HALT)) == target_reset)) {
 			DEBUG_INFO(", success %08" PRIx32 " after %" PRId32 "ms\n",
 				  dhcsr_status, platform_time_ms() - start_time);

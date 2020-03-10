@@ -96,7 +96,9 @@ extern long cortexm_wait_timeout;
 /* Bits 31:26 - Reserved */
 #define CORTEXM_DHCSR_S_RESET_ST	(1 << 25)
 #define CORTEXM_DHCSR_S_RETIRE_ST	(1 << 24)
-/* Bits 23:20 - Reserved */
+/* Bits 23:21 - Reserved */
+/* Bit 20 on ArmV8, S_SDE set means: Secure invasive debug allowed.*/
+#define CORTEXM_DHCSR_S_SDE 		(1 << 20)
 #define CORTEXM_DHCSR_S_LOCKUP		(1 << 19)
 #define CORTEXM_DHCSR_S_SLEEP		(1 << 18)
 #define CORTEXM_DHCSR_S_HALT		(1 << 17)
