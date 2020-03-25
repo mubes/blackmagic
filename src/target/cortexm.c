@@ -273,6 +273,8 @@ bool cortexm_probe(ADIv5_AP_t *ap)
 	}
 
 	adiv5_ap_ref(ap);
+	t->t_designer = ap->ap_designer;
+	t->idcode     = ap->ap_partno;
 	uint32_t identity = ap->idr & 0xff;
 	struct cortexm_priv *priv = calloc(1, sizeof(*priv));
 	if (!priv) {			/* calloc failed: heap exhaustion */
@@ -359,7 +361,12 @@ bool cortexm_probe(ADIv5_AP_t *ap)
 	} else {
 		target_check_error(t);
 	}
-
+/* Temporary printout to get feedback from users.*/
+#if !defined(PC_HOSTED)
+#include "gdb_packet.h"
+        gdb_outf("Probing for Designer %3x Partno %3x\n",
+                 ap->ap_designer, ap->ap_partno);
+#endif
 #define PROBE(x) \
 	do { if ((x)(t)) {target_halt_resume(t, 0); return true;} else target_check_error(t); } while (0)
 
