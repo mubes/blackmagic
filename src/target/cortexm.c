@@ -272,7 +272,6 @@ bool cortexm_probe(ADIv5_AP_t *ap)
 		return false;
 	}
 
-	adiv5_ap_ref(ap);
 	t->t_designer = ap->ap_designer;
 	t->idcode     = ap->ap_partno;
 	uint32_t identity = ap->idr & 0xff;
@@ -281,6 +280,7 @@ bool cortexm_probe(ADIv5_AP_t *ap)
 		DEBUG_WARN("calloc: failed in %s\n", __func__);
 		return false;
 	}
+	adiv5_ap_ref(ap);
 
 	t->priv = priv;
 	t->priv_free = cortexm_priv_free;
