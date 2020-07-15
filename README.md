@@ -58,7 +58,7 @@ Breakpoint 1, main () at /devel/en_apps/gpio/f4_discovery/../gpio.c:70
 BLACKMAGIC
 ==========
 
-You can also build blackmagic as a PC hosted application
+You can also build blackmagic as a PC hosted application. From the top level directory;
 "make PROBE_HOST=hosted"
 
 This builds the same GDB server, that is running on the Black Magic Probe.

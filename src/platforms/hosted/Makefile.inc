@@ -1,17 +1,20 @@
+PC_HOSTED = 1
+PLATFORM_PC = $(PLATFORM_DIR)/../pc
+
 SYS = $(shell $(CC) -dumpmachine)
 CFLAGS += -DENABLE_DEBUG -DPLATFORM_HAS_DEBUG
-CFLAGS +=-I ./target -I./platforms/pc
+CFLAGS +=-I ./target -I$(PLATFORM_PC)
 
 ifneq (, $(findstring linux, $(SYS)))
-SRC += serial_unix.c
+SRC += $(PLATFORM_PC)/serial_unix.c
 CFLAGS += -fsanitize=address
 LDFLAGS += -lasan
 else ifneq (, $(findstring mingw, $(SYS)))
-SRC += 	 serial_win.c
+SRC += 	 $(PLATFORM_PC)/serial_win.c
 LDFLAGS += -lws2_32
 LDFLAGS += -lsetupapi
 else ifneq (, $(findstring cygwin, $(SYS)))
-SRC += 	 serial_win.c
+SRC += 	 $(PLATFORM_PC)/serial_win.c
 LDFLAGS += -lws2_32
 LDFLAGS += -lsetupapi
 #https://github.com/dmlc/xgboost/issues/1945 indicates macosx as indicator
@@ -30,13 +33,17 @@ ifeq ($(shell pkg-config --exists hidapi-libusb && echo 0), 0)
 CFLAGS += $(shell pkg-config --cflags hidapi-libusb)
 LDFLAGS += $(shell pkg-config --libs hidapi-libusb)
 CFLAGS  +=  -DCMSIS_DAP
-SRC += cmsis_dap.c dap.c
+SRC += $(PLATFORM_DIR)/cmsis_dap.c $(PLATFORM_DIR)/dap.c
 endif
 
-VPATH += platforms/pc
-SRC += timing.c cl_utils.c utils.c libusb_utils.c
-SRC += stlinkv2.c
-SRC += bmp_remote.c remote_swdptap.c remote_jtagtap.c
-SRC += ftdi_bmp.c libftdi_swdptap.c libftdi_jtagtap.c
-SRC += jlink.c jlink_adiv5_swdp.c jlink_jtagtap.c
-PC_HOSTED = 1
+#VPATH += platforms/pc
+
+SRC += $(PLATFORM_PC)/gdb_if.c           $(PLATFORM_PC)/cl_utils.c
+SRC += $(PLATFORM_PC)/libusb_utils.c     $(PLATFORM_PC)/utils.c
+SRC += $(PLATFORM_DIR)/bmp_remote.c      $(PLATFORM_DIR)/remote_swdptap.c
+SRC += $(PLATFORM_DIR)/remote_jtagtap.c  $(PLATFORM_DIR)/ftdi_bmp.c
+SRC += $(PLATFORM_DIR)/libftdi_swdptap.c $(PLATFORM_DIR)/libftdi_jtagtap.c
+SRC += $(PLATFORM_DIR)/jlink.c           $(PLATFORM_DIR)/jlink_adiv5_swdp.c
+SRC += $(PLATFORM_DIR)/jlink_jtagtap.c   $(PLATFORM_DIR)/stlinkv2.c
+SRC += $(PLATFORM_DIR)/platform.c
+SRC += timing.c

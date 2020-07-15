@@ -3,35 +3,40 @@ MFLAGS += --no-print-dir
 Q := @
 endif
 
-PC_HOSTED =
-NO_LIBOPENCM3 =
 ifeq ($(PROBE_HOST), libftdi)
 	PC_HOSTED = true
-	NO_LIBOPENCM3 = true
 endif
 ifeq ($(PROBE_HOST), pc-stlinkv2)
 	PC_HOSTED = true
-	NO_LIBOPENCM3 = true
 endif
-ifeq ($(PROBE_HOST), pc-hosted)
+ifeq ($(PROBE_HOST), hosted)
 	PC_HOSTED = true
-	NO_LIBOPENCM3 = true
+endif
+ifeq ($(PROBE_HOST), library)
+	PC_HOSTED = true
 endif
 
-all:
-ifndef NO_LIBOPENCM3
+ifndef PC_HOSTED
+USE_CM3=cm3
+endif
+
+.PHONY: cm3
+
+all: $(USE_CM3)
+	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src
+
+cm3:
 	$(Q)if [ ! -f libopencm3/Makefile ]; then \
 		echo "Initialising git submodules..." ;\
 		git submodule init ;\
 		git submodule update ;\
 	fi
 	$(Q)$(MAKE) $(MFLAGS) -C libopencm3 lib
-endif
-	$(Q)$(MAKE) $(MFLAGS) -C src
+
+all_platforms: cm3
+	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src $@
 
 clean:
-ifndef NO_LIBOPENCM3
 	$(Q)$(MAKE) $(MFLAGS) -C libopencm3 $@
-endif
-	$(Q)$(MAKE) $(MFLAGS) -C src $@
+	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src $@
 
