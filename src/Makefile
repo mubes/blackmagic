@@ -26,6 +26,8 @@ ifeq ($(ENABLE_DEBUG), 1)
 CFLAGS += -DENABLE_DEBUG
 endif
 
+TEMP_VERSION=/tmp/magicversion.tmp
+
 # Core probe files
 PROBELIBSRC =		\
 	command.c	\
@@ -183,14 +185,12 @@ all_platforms:
 print-%:
 	@echo $* is $($*)
 
-# This should really be forced to make sure we don't pick up an old version
-# but that means an almost full rebuild for every cycle. Let's compromise
-# and only build it if it doesn't exist.
-#$(OLOC)/include/version.h: FORCE  | $(DEPDIR) $(OLOC)
-$(OLOC)/include/version.h: | $(DEPDIR) $(OLOC)
+$(OLOC)/include/version.h: FORCE  | $(DEPDIR) $(OLOC)
 	$(Q)echo " GIT      include/version.h"
 	$(Q)mkdir -p $(dir $@)
-	$(Q)echo "#define FIRMWARE_VERSION \"$(shell git describe --always --dirty)\"" > $@
+	$(Q)echo "#define FIRMWARE_VERSION \"$(shell git describe --always --dirty)\"" > $(TEMP_VERSION)
+	$(Q)cmp $(TEMP_VERSION) $@ > /dev/null 2>&1 || cp -f $(TEMP_VERSION) $@
+	$(Q)$(RM) $(TEMP_VERSION)
 
 check_build_platform: FORCE | $(DEPDIR) $(OLOC)
 	$(Q)echo " CHK      $(PROBE_HOST)"
