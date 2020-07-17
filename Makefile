@@ -36,7 +36,8 @@ cm3:
 all_platforms: cm3
 	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src $@
 
-clean:
+cm3_clean:
 	$(Q)$(MAKE) $(MFLAGS) -C libopencm3 $@
-	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src $@
 
+clean:
+	$(Q) CONTROLLED_MAKEFILE=1 $(MAKE) $(MFLAGS) -C src $@
